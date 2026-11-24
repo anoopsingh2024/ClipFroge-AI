@@ -1,10 +1,25 @@
 <div class="upload-page">
   <div class="upload-container">
 
-    <!-- Back Button -->
-    <button class="back-btn" type="button" (click)="goBack()">
-      ← Back
-    </button>
+    <div class="upload-topbar">
+      <button class="back-btn" type="button" (click)="goBack()">
+        ← Back
+      </button>
+      <nav class="auth-actions" aria-label="Account">
+        <a
+          class="auth-link login-link"
+          routerLink="/auth"
+          [queryParams]="{ returnUrl: '/upload' }">
+          Login
+        </a>
+        <a
+          class="auth-link register-link"
+          routerLink="/auth"
+          [queryParams]="{ mode: 'register', returnUrl: '/upload' }">
+          Register
+        </a>
+      </nav>
+    </div>
 
     <!-- Heading -->
     <div class="heading">
@@ -97,6 +112,14 @@
     <!-- Error Message -->
     <div class="error-message" *ngIf="errorMessage">
       ⚠️ {{ errorMessage }}
+      <div class="auth-error-actions" *ngIf="authenticationRequired">
+        <a routerLink="/auth" [queryParams]="{ returnUrl: '/upload' }">Log in</a>
+        <a
+          routerLink="/auth"
+          [queryParams]="{ mode: 'register', returnUrl: '/upload' }">
+          Create an account
+        </a>
+      </div>
     </div>
 
     <!-- Upload Button -->

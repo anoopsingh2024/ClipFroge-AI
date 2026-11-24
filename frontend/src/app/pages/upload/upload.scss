@@ -11,13 +11,49 @@
   margin: auto;
 }
 
+.upload-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 45px;
+}
+
 .back-btn {
   background: transparent;
   border: none;
   color: #92929d;
   cursor: pointer;
   font-size: 14px;
-  margin-bottom: 45px;
+  padding: 10px 0;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-link,
+.auth-error-actions a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid #55466f;
+  border-radius: 9px;
+  padding: 10px 16px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &:hover {
+    border-color: #9d6cff;
+    background: #211737;
+  }
+}
+
+.register-link {
+  background: #8e5cf6;
+  border-color: #8e5cf6;
 }
 
 .heading {
@@ -48,6 +84,13 @@
   font-weight: 700;
   letter-spacing: 2px;
   margin-bottom: 15px;
+}
+
+.auth-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 /* Upload Box */
