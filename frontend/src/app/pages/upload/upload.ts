@@ -2,7 +2,6 @@
 import { Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpEventType } from '@angular/common/http';
-import { RouterLink } from '@angular/router';
 
 import { VideoService } from '../../services/video';
 
@@ -44,7 +43,7 @@ interface ProcessedClip {
 @Component({
   selector: 'app-upload',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule],
   templateUrl: './upload.html',
   styleUrl: './upload.scss'
 })
@@ -61,7 +60,6 @@ export class Upload {
   uploadProgress = 0;
 
   errorMessage = '';
-  authenticationRequired = false;
   successMessage = '';
 
   clips: ProcessedClip[] = [];
@@ -119,7 +117,6 @@ export class Upload {
     if (this.uploading || this.processing) return;
 
     this.errorMessage = '';
-    this.authenticationRequired = false;
     this.successMessage = '';
 
     this.clearResults();
@@ -160,7 +157,6 @@ export class Upload {
     this.uploadProgress = 0;
 
     this.errorMessage = '';
-    this.authenticationRequired = false;
     this.successMessage = '';
 
     this.clearResults();
@@ -183,7 +179,6 @@ export class Upload {
     this.uploadProgress = 0;
 
     this.errorMessage = '';
-    this.authenticationRequired = false;
     this.successMessage = '';
 
     this.clearResults();
@@ -240,10 +235,9 @@ export class Upload {
         this.uploading = false;
         this.processing = false;
 
-        this.authenticationRequired = error?.status === 401;
-        this.errorMessage = this.authenticationRequired
-          ? 'Please log in or register before uploading a video.'
-          : error?.error?.message || 'Video upload failed. Please try again.';
+        this.errorMessage =
+          error?.error?.message ||
+          'Video upload failed. Please try again.';
 
         this.cdr.detectChanges();
       }
@@ -343,12 +337,10 @@ export class Upload {
 
         this.processing = false;
 
-        this.authenticationRequired = error?.status === 401;
-        this.errorMessage = this.authenticationRequired
-          ? 'Your login session has expired. Log in or register to continue.'
-          : error?.error?.message ||
-            error?.error?.error ||
-            'Video processing failed. Please try again.';
+        this.errorMessage =
+          error?.error?.message ||
+          error?.error?.error ||
+          'Video processing failed. Please try again.';
 
         this.successMessage = '';
 

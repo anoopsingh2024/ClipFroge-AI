@@ -108,8 +108,7 @@ export class Home {
 
     this.http.post<ProcessingResult>(
       `${this.API_URL}/process-url`,
-      { url: videoUrl },
-      { headers: { 'Idempotency-Key': crypto.randomUUID() } }
+      { url: videoUrl }
     ).pipe(
       finalize(() => {
         this.isProcessing = false;

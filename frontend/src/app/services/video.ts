@@ -38,16 +38,14 @@ export class VideoService {
   processVideo(filename: string): Observable<any> {
     return this.http.post(
       `${this.API_URL}/process/${encodeURIComponent(filename)}`,
-      {},
-      { headers: { 'Idempotency-Key': crypto.randomUUID() } }
+      {}
     );
   }
 
   processVideoUrl(url: string): Observable<any> {
     return this.http.post(
       `${this.API_URL}/process-url`,
-      { url },
-      { headers: { 'Idempotency-Key': crypto.randomUUID() } }
+      { url }
     );
   }
 
