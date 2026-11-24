@@ -76,8 +76,8 @@ database access; all wallet and payment writes go through the trusted backend.
 1. Create a Firebase project and enable **Authentication → Phone**.
 2. Add `localhost` under Firebase Authentication authorized domains.
 3. Add development test phone numbers and their test codes under the Phone
-   provider's test-number settings. Firebase supplies these test codes; the
-   application does not hardcode OTPs. Turn on real SMS delivery when ready.
+   provider's test-number settings. Test numbers do not receive SMS; enter the
+   code configured in Firebase. Use a real phone number to test SMS delivery.
 4. Create a Firestore database and deploy `firestore.rules` and
    `firestore.indexes.json` with `firebase deploy --only firestore --project YOUR_PROJECT_ID`.
 5. Copy `frontend/src/environments/environment.example.ts` to

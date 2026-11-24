@@ -71,6 +71,29 @@ h1 { margin: 12px 0 8px; font-size: 30px; letter-spacing: -0.035em; }
   background: linear-gradient(110deg, #713fe0, #4a64d6);
 }
 
+.setup-notice {
+  display: grid;
+  gap: 8px;
+  margin: -8px 0 20px;
+  padding: 14px;
+  border: 1px solid rgba(255, 190, 92, 0.4);
+  border-radius: 12px;
+  background: rgba(255, 190, 92, 0.08);
+  color: #f3d9ac;
+  font-size: 12px;
+  line-height: 1.55;
+
+  strong {
+    color: #ffcf82;
+    font-size: 13px;
+  }
+
+  code {
+    color: #fff;
+    overflow-wrap: anywhere;
+  }
+}
+
 form { display: grid; gap: 17px; }
 label { display: grid; gap: 8px; color: #e6e2f0; font-size: 13px; font-weight: 650; }
 

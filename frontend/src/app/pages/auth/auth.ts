@@ -38,9 +38,6 @@ export class AuthPage implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.registerMode = this.route.snapshot.queryParamMap.get('mode') === 'register';
     this.returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') || '/dashboard';
-    if (!this.firebase.isConfigured) {
-      this.errorMessage = 'Set Firebase Web App configuration in frontend/src/environments/environment.ts before using phone sign-in.';
-    }
   }
 
   ngOnDestroy(): void {
@@ -143,7 +140,23 @@ export class AuthPage implements OnInit, OnDestroy {
     if (error instanceof HttpErrorResponse) {
       return error.error?.message || 'Account request failed. Please try again.';
     }
-    if (error instanceof Error) return error.message;
+    if (error instanceof Error) {
+      const code = (error as Error & { code?: string }).code;
+      switch (code) {
+        case 'auth/operation-not-allowed':
+          return 'Enable Phone Authentication in Firebase Console → Authentication → Sign-in method.';
+        case 'auth/unauthorized-domain':
+          return 'Add localhost to Firebase Authentication → Settings → Authorized domains.';
+        case 'auth/invalid-phone-number':
+          return 'Enter a valid Indian mobile number with 10 digits.';
+        case 'auth/too-many-requests':
+          return 'Firebase temporarily blocked SMS requests. Wait and try again, or use a Firebase test phone number.';
+        case 'auth/captcha-check-failed':
+        case 'auth/missing-recaptcha-token':
+          return 'Phone verification could not complete reCAPTCHA. Allow Google reCAPTCHA in your browser and try again.';
+      }
+      return error.message;
+    }
     return 'Could not verify the phone number. Please try again.';
   }
 }

@@ -15,6 +15,20 @@
       <button type="button" [class.active]="registerMode" (click)="setMode(true)">Register</button>
     </div>
 
+    <div class="setup-notice" *ngIf="!firebase.isConfigured">
+      <strong>Phone verification is not configured yet.</strong>
+      <span>
+        Add your Firebase Web App values in
+        <code>frontend/src/environments/environment.ts</code>, enable Phone
+        Authentication, and add <code>localhost</code> to Firebase's authorized
+        domains. Then restart the frontend.
+      </span>
+      <span>
+        For Firebase test phone numbers, enter the test code configured in
+        Firebase; test numbers do not receive SMS.
+      </span>
+    </div>
+
     <form (ngSubmit)="confirmation ? verifyOtp() : sendOtp()">
       <label *ngIf="registerMode">
         Full name
@@ -67,7 +81,8 @@
 
       <button class="primary" type="submit" [disabled]="busy || !firebase.isConfigured">
         <span *ngIf="busy">Please wait…</span>
-        <span *ngIf="!busy && !confirmation">Send verification code</span>
+        <span *ngIf="!busy && !confirmation && firebase.isConfigured">Send verification code</span>
+        <span *ngIf="!busy && !confirmation && !firebase.isConfigured">Configure Firebase to send code</span>
         <span *ngIf="!busy && confirmation">Verify and continue</span>
       </button>
     </form>
