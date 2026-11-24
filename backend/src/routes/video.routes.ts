@@ -650,12 +650,20 @@ async function processInputVideo(
         `/api/videos/clip/${jobId}/${encodeURIComponent(filename)}`;
       const clipDownloadPath =
         `/api/videos/clip-download/${jobId}/${encodeURIComponent(filename)}`;
+      const absoluteClipPath =
+        `http://localhost:5000${clipPath}`;
+      const absoluteDownloadPath =
+        `http://localhost:5000${clipDownloadPath}`;
       return {
         filename,
         // These paths are used by Angular for preview and download.*
         path: clipPath,
         url: clipPath,
+        previewUrl: clipPath,
+        videoUrl: absoluteClipPath,
+        absoluteUrl: absoluteClipPath,
         downloadUrl: clipDownloadPath,
+        absoluteDownloadUrl: absoluteDownloadPath,
         duration: clip.duration ?? 0,
         start: clip.start ?? 0,
         end: clip.end ?? 0,
@@ -693,6 +701,9 @@ async function processInputVideo(
       clips,
       jobId,
       downloadUrl: `/api/videos/download/${jobId}`,
+      downloadUrlAbsolute: `http://localhost:5000/api/videos/download/${jobId}`,
+      highlightCount: aiResult.totalClips ?? clips.length,
+      highlights: clips,
       expiresInMinutes: 30,
       timeline: aiResult.timeline || [],
       analysis: aiResult.analysis || {}
