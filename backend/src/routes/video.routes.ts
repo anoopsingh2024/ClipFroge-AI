@@ -667,9 +667,6 @@ async function processInputVideo(
         duration: clip.duration ?? 0,
         start: clip.start ?? 0,
         end: clip.end ?? 0,
-        montage: clip.montage ?? false,
-        segments: clip.segments ?? [],
-        transitions: clip.transitions ?? 0,
         score: clip.score ?? clip.interestScore ?? 0,
         interestScore:
           clip.interestScore ?? clip.score ?? 0,
@@ -679,7 +676,6 @@ async function processInputVideo(
         filter: clip.filter ?? null,
         backgroundStyle: clip.backgroundStyle ?? null,
         backgroundColors: clip.backgroundColors ?? [],
-        backgroundStyles: clip.backgroundStyles ?? [],
         selectedEffects: clip.selectedEffects ?? [],
         effects: clip.effects ?? clip.selectedEffects ?? [],
         backgroundBlur: clip.backgroundBlur ?? null,
