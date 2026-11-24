@@ -50,7 +50,7 @@ const FILTERS: Record<string, string> = {
   high_contrast: 'eq=contrast=1.5',
   desaturated: 'eq=saturation=0.35',
   neon: 'eq=saturation=1.8:contrast=1.2',
-  film: 'curves=film',
+  film: "curves=all='0/0 0.25/0.18 0.75/0.82 1/1'",
   sunset: 'colorbalance=rs=.16:gs=.03:bs=-.12',
   winter: 'colorbalance=bs=.15:rs=-.05',
   summer: 'eq=saturation=1.25:brightness=0.04',
@@ -67,7 +67,26 @@ const FILTERS: Record<string, string> = {
   polaroid: 'eq=contrast=0.85:brightness=0.06:saturation=0.8',
   aqua: 'colorbalance=bs=.12:gs=.05',
   lavender: 'colorbalance=bs=.1:rs=.04',
-  sunset_glow: 'eq=brightness=0.04:saturation=1.2'
+  sunset_glow: 'eq=brightness=0.04:saturation=1.2',
+  cinematic_teal_orange: 'eq=contrast=1.08:saturation=1.05:gamma=0.98,colorbalance=rs=.035:gs=.006:bs=-.025',
+  hollywood_warm: 'eq=contrast=1.06:saturation=1.04:brightness=.008:gamma=1.01,colorbalance=rs=.035:gs=.012:bs=-.018',
+  dark_cinematic: 'eq=contrast=1.12:brightness=-.035:saturation=.94:gamma=.96,colorbalance=bs=.025:rs=-.012',
+  moody_blue: 'eq=contrast=1.08:brightness=-.018:saturation=.94:gamma=.98,colorbalance=bs=.055:gs=.008:rs=-.025',
+  film_look: "eq=contrast=1.05:saturation=1.02:gamma=.99,curves=all='0/0 0.25/0.21 0.75/0.79 1/1'",
+  vintage_cinema: 'eq=contrast=1.03:saturation=.84:brightness=.012:gamma=1.02,colorbalance=rs=.035:gs=.008:bs=-.025',
+  dramatic_contrast: 'eq=contrast=1.16:saturation=1.03:brightness=-.012:gamma=.96',
+  clean_creator: 'eq=contrast=1.04:saturation=1.06:brightness=.006',
+  modern_lifestyle: 'eq=contrast=1.05:saturation=1.08:brightness=.008:gamma=1.01,colorbalance=rs=.012:bs=-.008',
+  travel_look: 'eq=contrast=1.07:saturation=1.10:brightness=.01:gamma=1.02',
+  professional_portrait: 'eq=contrast=1.03:saturation=1.02:brightness=.006:gamma=1.01,colorbalance=rs=.012:gs=.004:bs=-.008',
+  gaming_punchy: 'eq=contrast=1.13:saturation=1.15:brightness=.004:gamma=.98',
+  retro_creator: 'eq=contrast=.98:saturation=.82:brightness=.018:gamma=1.03,colorbalance=rs=.045:gs=.01:bs=-.03',
+  dreamy_glow: 'eq=brightness=.012:contrast=.98:saturation=1.01,unsharp=5:5:.22:3:3:.08',
+  neon: 'eq=contrast=1.12:saturation=1.22:gamma=.98',
+  black_white_clean: 'hue=s=0,eq=contrast=1.08:gamma=.98',
+  sepia_film: 'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=contrast=1.03:brightness=.012',
+  soft_glow_creator: 'eq=brightness=.018:contrast=.98:saturation=1.01,unsharp=5:5:.18:3:3:.05',
+  hdr_style: 'eq=contrast=1.12:saturation=1.10:gamma=.96'
 };
 
 const EFFECTS: Record<string, string> = {

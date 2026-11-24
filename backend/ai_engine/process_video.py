@@ -34,16 +34,113 @@ CANDIDATE_STEP = 8.0
 MIN_INTEREST_SCORE = float(os.environ.get("CLIPFORGE_MIN_SCORE", "16"))
 WHISPER_MODEL_NAME = os.environ.get("CLIPFORGE_WHISPER_MODEL", "tiny")
 PROCESS_DEADLINE = None
+MUSIC_SELECTION_COUNTER = 0
+
+BACKGROUND_BLUR_RADIUS = max(
+    1, int(os.environ.get("CLIPFORGE_BACKGROUND_BLUR", "35"))
+)
+BACKGROUND_BLUR_PASSES = max(
+    1, int(os.environ.get("CLIPFORGE_BACKGROUND_BLUR_PASSES", "2"))
+)
+EFFECT_INTENSITY = os.environ.get(
+    "CLIPFORGE_EFFECT_INTENSITY", "medium"
+).strip().lower()
+if EFFECT_INTENSITY not in {"low", "medium", "high"}:
+    EFFECT_INTENSITY = "medium"
+
+FILTER_PRESETS = {
+    "cinematic_teal_orange": (
+        "eq=contrast=1.08:saturation=1.05:gamma=0.98,"
+        "colorbalance=rs=0.035:gs=0.006:bs=-0.025"
+    ),
+    "hollywood_warm": (
+        "eq=contrast=1.06:saturation=1.04:brightness=0.008:gamma=1.01,"
+        "colorbalance=rs=0.035:gs=0.012:bs=-0.018"
+    ),
+    "dark_cinematic": (
+        "eq=contrast=1.12:brightness=-0.035:saturation=0.94:gamma=0.96,"
+        "colorbalance=bs=0.025:rs=-0.012"
+    ),
+    "moody_blue": (
+        "eq=contrast=1.08:brightness=-0.018:saturation=0.94:gamma=0.98,"
+        "colorbalance=bs=0.055:gs=0.008:rs=-0.025"
+    ),
+    "film_look": (
+        "eq=contrast=1.05:saturation=1.02:gamma=0.99,"
+        "curves=all='0/0 0.25/0.21 0.75/0.79 1/1'"
+    ),
+    "vintage_cinema": (
+        "eq=contrast=1.03:saturation=0.84:brightness=0.012:gamma=1.02,"
+        "colorbalance=rs=0.035:gs=0.008:bs=-0.025"
+    ),
+    "dramatic_contrast": (
+        "eq=contrast=1.16:saturation=1.03:brightness=-0.012:gamma=0.96"
+    ),
+    "vibrant": "eq=contrast=1.05:saturation=1.16:gamma=1.01",
+    "natural": "eq=contrast=1.02:saturation=1.03:brightness=0.004",
+    "warm": (
+        "eq=contrast=1.04:saturation=1.03:gamma=1.01,"
+        "colorbalance=rs=0.028:gs=0.008:bs=-0.015"
+    ),
+    "cool": (
+        "eq=contrast=1.04:saturation=0.98:gamma=1.01,"
+        "colorbalance=bs=0.035:rs=-0.015"
+    ),
+    "bright": "eq=brightness=0.035:contrast=1.02:gamma=1.02",
+    "soft": "eq=contrast=0.96:saturation=0.98:brightness=0.012:gamma=1.02",
+    "high_contrast": "eq=contrast=1.14:saturation=1.04:gamma=0.97",
+    "rich_colors": "eq=contrast=1.06:saturation=1.12:gamma=1.0",
+    "clean_creator": "eq=contrast=1.04:saturation=1.06:brightness=0.006",
+    "modern_lifestyle": (
+        "eq=contrast=1.05:saturation=1.08:brightness=0.008:gamma=1.01,"
+        "colorbalance=rs=0.012:bs=-0.008"
+    ),
+    "travel_look": "eq=contrast=1.07:saturation=1.10:brightness=0.01:gamma=1.02",
+    "professional_portrait": (
+        "eq=contrast=1.03:saturation=1.02:brightness=0.006:gamma=1.01,"
+        "colorbalance=rs=0.012:gs=0.004:bs=-0.008"
+    ),
+    "gaming_punchy": "eq=contrast=1.13:saturation=1.15:brightness=0.004:gamma=0.98",
+    "retro": (
+        "eq=contrast=0.98:saturation=0.82:brightness=0.018:gamma=1.03,"
+        "colorbalance=rs=0.045:gs=0.01:bs=-0.03"
+    ),
+    "vintage": "curves=vintage,eq=contrast=1.02:saturation=0.86:gamma=1.02",
+    "dreamy_glow": (
+        "eq=brightness=0.012:contrast=0.98:saturation=1.01,"
+        "unsharp=5:5:0.22:3:3:0.08"
+    ),
+    "neon": "eq=contrast=1.12:saturation=1.22:gamma=0.98",
+    "black_white": "hue=s=0,eq=contrast=1.08:gamma=0.98",
+    "sepia": (
+        "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:"
+        ".272:.534:.131,eq=contrast=1.03:brightness=0.012"
+    ),
+    "soft_glow": (
+        "eq=brightness=0.018:contrast=0.98:saturation=1.01,"
+        "unsharp=5:5:0.18:3:3:0.05"
+    ),
+    "hdr_style": "eq=contrast=1.12:saturation=1.10:gamma=0.96",
+}
 
 EFFECT_PRESETS = {
-    "natural_color": "eq=saturation=1.06:contrast=1.03",
-    "cinematic_warm": "eq=contrast=1.06:saturation=1.08:brightness=0.01,colorbalance=rs=0.02:bs=-0.01",
-    "bright_lift": "eq=brightness=0.035:contrast=1.03",
-    "soft_sharpen": "unsharp=5:5:0.35:3:3:0.12",
-    "punchy": "eq=contrast=1.10:saturation=1.12",
-    "vivid": "eq=saturation=1.14:contrast=1.04",
-    "soft_warm": "colorbalance=rs=0.02:gs=0.008:bs=-0.012",
-    "cool_cinematic": "eq=contrast=1.05:saturation=0.96,colorbalance=bs=0.025:rs=-0.01",
+    "smooth_zoom_in": None,
+    "smooth_zoom_out": None,
+    "dynamic_punch_in": None,
+    "subtle_camera_movement": None,
+    "subtle_shake": (
+        "crop=iw-8:ih-8:x='4+2*sin(2*PI*t*1.7)':"
+        "y='4+2*cos(2*PI*t*1.3)',scale=720:1280:flags=lanczos"
+    ),
+    "flash_transition": "eq=brightness=0.018",
+    "fade_in_out": None,
+    "cinematic_vignette": "vignette=PI/5",
+    "soft_glow": "unsharp=5:5:0.18:3:3:0.05",
+    "motion_blur": "tblend=all_mode=average:all_opacity=0.16",
+    "rgb_split": "rgbashift=rh=2:bh=-2",
+    "light_leak": "eq=brightness=0.012:saturation=1.03",
+    "film_grain": "noise=alls=4:allf=t+u",
+    "slow_motion": None,
 }
 
 INTEREST_WORDS = {
@@ -409,23 +506,81 @@ def analyze_profile(video_path):
     }
 
 
-def choose_effects(profile, interest_score, mood):
-    effects = []
-    if profile["brightness"] < 85:
-        effects.append("bright_lift")
-    if profile["saturation"] < 65:
-        effects.append("vivid")
-    if mood == "cinematic":
-        effects.append("cinematic_warm")
+def choose_visual_treatment(profile, interest_score, mood):
+    """Choose one restrained grade and a few mood-appropriate effects."""
+    brightness = profile["brightness"]
+    saturation = profile["saturation"]
+    contrast = profile["contrast"]
+
+    if mood == "funny":
+        filter_name = "vibrant" if saturation < 125 else "clean_creator"
+        effects = ["dynamic_punch_in", "subtle_shake"]
+    elif mood == "motivational":
+        filter_name = "hollywood_warm" if brightness < 185 else "dramatic_contrast"
+        effects = ["smooth_zoom_in", "flash_transition"]
     elif mood == "calm":
-        effects.append("soft_warm")
-    elif mood == "funny":
-        effects.append("natural_color")
-    elif mood == "motivational" or interest_score >= 75:
-        effects.append("punchy")
-    if profile["contrast"] < 35:
-        effects.append("soft_sharpen")
-    return list(dict.fromkeys(effects or ["natural_color"]))[:2]
+        filter_name = "soft" if saturation > 70 else "professional_portrait"
+        effects = ["smooth_zoom_in", "fade_in_out", "soft_glow"]
+    else:
+        filter_name = "cinematic_teal_orange"
+        effects = ["smooth_zoom_in", "cinematic_vignette", "film_grain"]
+
+    if brightness < 75:
+        filter_name = "bright" if mood == "calm" else "hollywood_warm"
+    elif brightness > 220:
+        filter_name = "dark_cinematic" if mood == "cinematic" else "natural"
+    elif saturation > 180:
+        filter_name = "natural"
+
+    if contrast < 28 and "soft_glow" not in effects:
+        effects.append("soft_glow")
+    if interest_score >= 80 and mood in {"funny", "motivational"}:
+        effects.append("dynamic_punch_in")
+
+    if EFFECT_INTENSITY == "low":
+        effects = effects[:1]
+    elif EFFECT_INTENSITY == "medium":
+        effects = effects[:3]
+    else:
+        effects = effects[:4]
+
+    return filter_name, list(dict.fromkeys(effects))
+
+
+def build_effect_filters(effect_names, duration, mood):
+    """Resolve metadata effect names into safe FFmpeg filters."""
+    filters = []
+    for name in effect_names:
+        if name in {"smooth_zoom_in", "dynamic_punch_in", "smooth_zoom_out", "slow_motion"}:
+            continue
+        if name == "fade_in_out":
+            filters.extend([
+                "fade=t=in:st=0:d=0.45",
+                f"fade=t=out:st={max(0.45, duration - 0.65):.3f}:d=0.65",
+            ])
+            continue
+        if name == "flash_transition":
+            filters.append("eq=brightness=0.018")
+            continue
+        preset = EFFECT_PRESETS.get(name)
+        if preset:
+            filters.append(preset)
+    if mood == "calm" and "fade_in_out" not in effect_names:
+        filters.extend([
+            "fade=t=in:st=0:d=0.35",
+            f"fade=t=out:st={max(0.35, duration - 0.55):.3f}:d=0.55",
+        ])
+    return filters
+
+
+def zoom_expression(mood, effect_names):
+    if "smooth_zoom_out" in effect_names:
+        return (
+            "min(1.035,1.035-0.025*(0.5-0.5*cos(2*PI*on/240)))"
+        )
+    if mood == "funny" or "dynamic_punch_in" in effect_names:
+        return "min(1.055,1+0.035*(0.5-0.5*cos(2*PI*on/180)))"
+    return "min(1.045,1+0.025*(0.5-0.5*cos(2*PI*on/240)))"
 
 
 def classify_mood(transcript, clip, timeline):
@@ -501,8 +656,14 @@ def choose_music_track(mood):
         except Exception as exc:
             log("Music catalog could not be read: " + str(exc))
 
+    global MUSIC_SELECTION_COUNTER
     exact = [entry for entry in valid if entry[2]]
-    chosen = exact or valid
+    candidates = exact or valid
+    chosen = None
+    if candidates:
+        offset = MUSIC_SELECTION_COUNTER % len(candidates)
+        chosen = [candidates[offset]]
+        MUSIC_SELECTION_COUNTER += 1
     if chosen:
         track_path, metadata, _ = chosen[0]
         log(f"Background music selected from catalog: {track_path.name}")
@@ -539,26 +700,37 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
     ass_path = output_dir / f"{stem}-highlight-{index:02d}.ass"
 
     mood = classify_mood(transcript, clip, timeline)
-    effects = choose_effects(profile, clip["interestScore"], mood)
+    filter_name, effects = choose_visual_treatment(
+        profile, clip["interestScore"], mood
+    )
     music_path, music_info = choose_music_track(mood)
     caption_count = create_ass_captions(transcript, clip["start"], clip["end"], ass_path)
+    duration = float(clip["duration"])
+    blur = (
+        f"luma_radius={BACKGROUND_BLUR_RADIUS}:"
+        f"luma_power={BACKGROUND_BLUR_PASSES}:"
+        f"chroma_radius={BACKGROUND_BLUR_RADIUS}:"
+        f"chroma_power={BACKGROUND_BLUR_PASSES}"
+    )
+    zoom = zoom_expression(mood, effects)
 
     video_chain = (
         "[0:v]split=2[bgsrc][fgsrc];"
         "[bgsrc]scale=720:1280:force_original_aspect_ratio=increase,"
-        "crop=720:1280,boxblur=18:2,eq=brightness=-0.03:saturation=0.90[bg];"
+        f"crop=720:1280,boxblur={blur},"
+        "eq=brightness=-0.025:saturation=0.98[bg];"
         "[fgsrc]scale=720:1280:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,"
-        "zoompan=z='min(1.035,1+0.025*(0.5-0.5*cos(2*PI*on/240)))':"
+        f"zoompan=z='{zoom}':"
         "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=720x1280:fps=24[vbase]"
     )
-    filters = [EFFECT_PRESETS[name] for name in effects]
+    filters = [FILTER_PRESETS[filter_name]]
+    filters.extend(build_effect_filters(effects, duration, mood))
     if caption_count:
         filters.append(f"ass=filename='{escape_filter_path(ass_path)}'")
     filters.append("format=yuv420p")
     video_chain += ";[vbase]" + ",".join(filters) + "[vout]"
 
-    duration = float(clip["duration"])
     command = [
         FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
         "-ss", str(clip["start"]), "-i", str(input_path)
@@ -618,8 +790,16 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         "mood": mood, "music": music_info, "captionCount": caption_count,
         "autoEdited": True,
         "framing": "9:16-blurred-background-with-fitted-foreground",
+        "filter": filter_name,
         "selectedEffects": effects,
-        "animation": "subtle-animated-zoom-on-final-composition"
+        "effects": effects,
+        "backgroundBlur": {
+            "enabled": True,
+            "intensity": BACKGROUND_BLUR_RADIUS,
+            "passes": BACKGROUND_BLUR_PASSES,
+            "scope": "background-layer-only"
+        },
+        "animation": "mood-aware-smooth-zoom-on-final-composition"
     }
 
 
@@ -699,6 +879,12 @@ def process_video(input_path):
         "analysis": {
             "signals": ["audioEnergy", "visualMotion", "sceneChanges", "selectedClip"],
             "minimumInterestScore": MIN_INTEREST_SCORE,
+            "backgroundBlur": {
+                "enabled": True,
+                "intensity": BACKGROUND_BLUR_RADIUS,
+                "passes": BACKGROUND_BLUR_PASSES,
+            },
+            "effectIntensity": EFFECT_INTENSITY,
             "note": "Heuristic audio/visual highlight ranking; not human-level semantic understanding."
         },
         "filename": rendered[0]["filename"], "clipStart": rendered[0]["start"],
