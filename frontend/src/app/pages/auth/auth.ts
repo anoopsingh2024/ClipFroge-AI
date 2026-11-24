@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ConfirmationResult } from 'firebase/auth';
@@ -26,13 +26,15 @@ export class AuthPage implements OnInit, OnDestroy {
   errorMessage = '';
   infoMessage = '';
   private cooldownTimer: ReturnType<typeof setInterval> | null = null;
+  private destroyed = false;
   private returnUrl = '/dashboard';
 
   constructor(
     readonly firebase: FirebaseAuthService,
     private accounts: AccountService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private changeDetector: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -41,6 +43,7 @@ export class AuthPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.stopCooldown();
     this.firebase.clearRecaptcha();
   }
@@ -52,6 +55,7 @@ export class AuthPage implements OnInit, OnDestroy {
     this.infoMessage = '';
     this.confirmation = null;
     this.otp = '';
+    this.refreshView();
   }
 
   async sendOtp(): Promise<void> {
@@ -66,6 +70,7 @@ export class AuthPage implements OnInit, OnDestroy {
     try {
       const e164 = this.firebase.normalizePhone(this.phoneNumber);
       this.busy = true;
+      this.refreshView();
       this.confirmation = await this.firebase.sendOtp(e164);
       this.phoneNumber = e164;
       this.verificationAttempts = 0;
@@ -77,6 +82,7 @@ export class AuthPage implements OnInit, OnDestroy {
       this.firebase.clearRecaptcha();
     } finally {
       this.busy = false;
+      this.refreshView();
     }
   }
 
@@ -93,6 +99,7 @@ export class AuthPage implements OnInit, OnDestroy {
 
     this.busy = true;
     this.errorMessage = '';
+    this.refreshView();
     try {
       await this.confirmation.confirm(this.otp.trim());
       if (this.registerMode) {
@@ -119,6 +126,7 @@ export class AuthPage implements OnInit, OnDestroy {
       }
     } finally {
       this.busy = false;
+      this.refreshView();
     }
   }
 
@@ -127,6 +135,7 @@ export class AuthPage implements OnInit, OnDestroy {
     this.cooldownSeconds = 30;
     this.cooldownTimer = setInterval(() => {
       this.cooldownSeconds = Math.max(0, this.cooldownSeconds - 1);
+      this.refreshView();
       if (this.cooldownSeconds === 0) this.stopCooldown();
     }, 1000);
   }
@@ -149,14 +158,32 @@ export class AuthPage implements OnInit, OnDestroy {
           return 'Add localhost to Firebase Authentication → Settings → Authorized domains.';
         case 'auth/invalid-phone-number':
           return 'Enter a valid Indian mobile number with 10 digits.';
+        case 'auth/invalid-app-credential':
+        case 'auth/missing-app-credential':
+          return 'Firebase rejected the app verification. Check Phone Authentication, add localhost to Authorized domains, and make sure the Firebase API key allows Identity Toolkit API.';
+        case 'auth/invalid-api-key':
+        case 'auth/api-key-not-valid':
+          return 'Firebase API key is invalid or restricted. Verify the Web App config and allow Identity Toolkit API for this key.';
+        case 'auth/app-not-authorized':
+          return 'This web app or domain is not authorized in Firebase. Check the Firebase project and add localhost to Authorized domains.';
+        case 'auth/quota-exceeded':
+          return 'Firebase SMS quota is exceeded. Use a configured Firebase test phone number or check the project SMS limits.';
         case 'auth/too-many-requests':
           return 'Firebase temporarily blocked SMS requests. Wait and try again, or use a Firebase test phone number.';
+        case 'auth/network-request-failed':
+          return 'Firebase could not be reached. Check your internet connection and allow Google reCAPTCHA and Firebase Auth requests in the browser/network.';
         case 'auth/captcha-check-failed':
         case 'auth/missing-recaptcha-token':
           return 'Phone verification could not complete reCAPTCHA. Allow Google reCAPTCHA in your browser and try again.';
       }
-      return error.message;
+      return code
+        ? `Firebase error (${code}): ${error.message}`
+        : error.message;
     }
     return 'Could not verify the phone number. Please try again.';
+  }
+
+  private refreshView(): void {
+    if (!this.destroyed) this.changeDetector.detectChanges();
   }
 }
