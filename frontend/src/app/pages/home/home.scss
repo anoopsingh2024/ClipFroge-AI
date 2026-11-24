@@ -170,7 +170,17 @@
   width: 100%;
   max-width: 650px;
   margin: 30px auto 0;
+}
+
+.processing-error {
+  width: 100%;
+  max-width: 650px;
+  margin: 30px auto 0;
+  padding: 14px 18px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
   border-radius: 17px;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
   box-sizing: border-box;
 }
 

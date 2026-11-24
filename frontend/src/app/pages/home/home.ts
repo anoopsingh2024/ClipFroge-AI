@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectorRef, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
@@ -56,8 +56,12 @@ export class Home {
   isProcessing = false;
   isDownloading = false;
   result: ProcessingResult | null = null;
+  processingError = '';
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private changeDetector: ChangeDetectorRef
+  ) {}
 
   processVideoUrl(url: string): void {
     const videoUrl = url.trim();
@@ -97,6 +101,7 @@ export class Home {
 
     this.isProcessing = true;
     this.result = null;
+    this.processingError = '';
 
     this.http.post<ProcessingResult>(
       `${this.API_URL}/process-url`,
@@ -104,37 +109,48 @@ export class Home {
     ).pipe(
       finalize(() => {
         this.isProcessing = false;
+        this.changeDetector.detectChanges();
       })
     ).subscribe({
       next: (response) => {
-        const clips = response?.clips?.length
-          ? response.clips
-          : response?.highlights ?? [];
+        const payload = (response as ProcessingResult & {
+          body?: ProcessingResult;
+        })?.body ?? response;
+        const clips = Array.isArray(payload?.clips) && payload.clips.length
+          ? payload.clips
+          : Array.isArray(payload?.highlights)
+            ? payload.highlights
+            : [];
 
-        if (!response?.success || !response.jobId || clips.length === 0) {
-          alert(response?.message || 'No highlight clips were generated.');
+        if (!payload?.success || !payload.jobId || clips.length === 0) {
+          this.processingError =
+            payload?.message || 'No highlight clips were generated.';
+          alert(this.processingError);
+          this.changeDetector.detectChanges();
           return;
         }
 
         this.result = {
-          ...response,
+          ...payload,
           clips,
           highlights: clips,
           totalClips:
-            response.totalClips ??
-            response.highlightCount ??
+            payload.totalClips ??
+            payload.highlightCount ??
             clips.length
         };
+        this.changeDetector.detectChanges();
       },
 
       error: (error) => {
         console.error('Video URL processing error:', error);
-
-        alert(
+        this.processingError =
           error?.error?.error ||
           error?.error?.message ||
-          'Unable to process this video.'
-        );
+          'Unable to process this video.';
+
+        alert(this.processingError);
+        this.changeDetector.detectChanges();
       }
     });
   }

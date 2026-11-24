@@ -98,18 +98,22 @@
           <span>Please don't close this page while processing.</span>
         </div>
 
-        <div class="generated-results" *ngIf="result?.clips?.length">
+        <div class="processing-error" *ngIf="processingError && !isProcessing">
+          {{ processingError }}
+        </div>
+
+        <div class="generated-results" *ngIf="result as currentResult">
           <div class="results-heading">
             <div>
               <span class="results-badge">✓ AI PROCESSING COMPLETE</span>
               <h2>Your Clips Are Ready!</h2>
-              <p>{{ result!.totalClips }} clips generated successfully.</p>
+              <p>{{ currentResult.totalClips }} clips generated successfully.</p>
             </div>
           </div>
 
           <div class="results-stats">
             <div class="result-stat">
-              <strong>{{ result!.totalClips }}</strong>
+              <strong>{{ currentResult.totalClips }}</strong>
               <span>Generated Clips</span>
             </div>
 
@@ -127,7 +131,7 @@
           <div class="clip-list">
             <div
               class="clip-item"
-              *ngFor="let clip of result!.clips; let i = index">
+              *ngFor="let clip of currentResult.clips; let i = index">
 
               <video
                 class="clip-preview"
@@ -175,7 +179,7 @@
 
           <p class="temporary-notice">
             Your generated clips are temporary.
-            Download them within {{ result!.expiresInMinutes }} minutes.
+            Download them within {{ currentResult.expiresInMinutes }} minutes.
             They will be deleted automatically.
           </p>
         </div>
