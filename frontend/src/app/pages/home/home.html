@@ -1,0 +1,309 @@
+<div class="app">
+  <header class="navbar">
+    <div class="logo">
+      <span class="logo-icon">⚡</span>
+      <span>ClipForge <b>AI</b></span>
+    </div>
+
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <button class="login-btn" type="button" routerLink="/auth">Login / Register</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-content">
+        <div class="badge">✨ AI-powered video clipping</div>
+
+        <h1>
+          Turn Long Videos Into
+          <span>Viral Shorts.</span>
+        </h1>
+
+        <p>
+          Upload your video or paste a supported YouTube/Facebook URL.
+          ClipForge AI finds the best moments and creates engaging
+          9:16 short videos automatically.
+        </p>
+
+        <div class="hero-buttons">
+          <button class="primary-btn" type="button" routerLink="/upload">
+            🚀 Upload Your Video
+          </button>
+
+          <a class="secondary-btn" href="#how-it-works">
+            ▶ See How It Works
+          </a>
+        </div>
+
+        <div class="trust">
+          <span>✓ Up to 1 GB upload</span>
+          <span>✓ AI Editing</span>
+          <span>✓ 9:16 Shorts</span>
+        </div>
+
+        <div class="url-tool" id="video-url">
+          <div class="url-tool-heading">
+            <span class="url-tool-icon">🔗</span>
+
+            <div>
+              <h2>Create Clips from a Video URL</h2>
+              <p>Paste a supported public YouTube or Facebook video link.</p>
+            </div>
+          </div>
+
+          <div class="supported-platforms">
+            <span class="platform-chip youtube-chip">▶ YouTube</span>
+            <span class="platform-chip facebook-chip">f Facebook</span>
+            <span class="duration-chip">30–60 sec clips</span>
+          </div>
+
+          <div class="url-input-row">
+            <input
+              #videoUrl
+              type="url"
+              class="video-url-input"
+              placeholder="Paste YouTube or Facebook video URL"
+              aria-label="YouTube or Facebook video URL"
+              autocomplete="url"
+              [disabled]="isProcessing"
+            />
+
+            <button
+              class="url-submit-btn"
+              type="button"
+              [disabled]="isProcessing"
+              (click)="processVideoUrl(videoUrl.value)">
+              <span *ngIf="!isProcessing">✨ Generate Clips</span>
+              <span *ngIf="isProcessing">⏳ Processing...</span>
+            </button>
+          </div>
+
+          <p class="url-help">
+            Only publicly accessible videos that you have permission
+            to process are supported. Private, login-protected or
+            restricted videos may not work.
+          </p>
+        </div>
+
+        <div class="processing-status" *ngIf="isProcessing">
+          <div class="loading-spinner"></div>
+          <h3>AI is creating your clips...</h3>
+          <p>Analyzing video, detecting highlights and generating Shorts.</p>
+          <span>Please don't close this page while processing.</span>
+        </div>
+
+        <div class="processing-error" *ngIf="processingError && !isProcessing">
+          {{ processingError }}
+        </div>
+
+        <div class="generated-results" *ngIf="result as currentResult">
+          <div class="results-heading">
+            <div>
+              <span class="results-badge">✓ AI PROCESSING COMPLETE</span>
+              <h2>Your Clips Are Ready!</h2>
+              <p>{{ currentResult.totalClips }} clips generated successfully.</p>
+            </div>
+          </div>
+
+          <div class="results-stats">
+            <div class="result-stat">
+              <strong>{{ currentResult.totalClips }}</strong>
+              <span>Generated Clips</span>
+            </div>
+
+            <div class="result-stat">
+              <strong>30–60 sec</strong>
+              <span>Clip Duration</span>
+            </div>
+
+            <div class="result-stat">
+              <strong>9:16</strong>
+              <span>Video Format</span>
+            </div>
+          </div>
+
+          <div class="clip-list">
+            <div
+              class="clip-item"
+              *ngFor="let clip of currentResult.clips; let i = index">
+
+              <video
+                class="clip-preview"
+                [src]="resolveClipUrl(clip)"
+                controls
+                muted
+                playsinline
+                preload="metadata">
+              </video>
+
+              <div class="clip-details">
+                <h4>Highlight {{ i + 1 }}</h4>
+
+                <p>
+                  {{ clip.duration }} seconds
+                  · {{ clip.start }}s – {{ clip.end }}s
+                </p>
+
+                <p class="clip-meta">
+                  Score {{ clip.interestScore ?? clip.score ?? 0 }}
+                  <span *ngIf="clip.mood"> · {{ clip.mood }}</span>
+                  <span *ngIf="clip.filter"> · {{ clip.filter }}</span>
+                  <span *ngIf="clip.backgroundStyle"> · {{ clip.backgroundStyle }} background</span>
+                </p>
+              </div>
+
+              <a
+                class="clip-download"
+                [href]="resolveClipDownloadUrl(clip)"
+                [attr.download]="clip.filename">
+                Download
+              </a>
+
+              <span class="clip-ready">✓ Ready</span>
+            </div>
+          </div>
+
+          <button
+            class="download-all-btn"
+            type="button"
+            [disabled]="isDownloading"
+            (click)="downloadAllClips()">
+            <span *ngIf="!isDownloading">⬇ Download All Clips</span>
+            <span *ngIf="isDownloading">⏳ Preparing Download...</span>
+          </button>
+
+          <p class="temporary-notice">
+            Your generated clips are temporary.
+            Download them within {{ currentResult.expiresInMinutes }} minutes.
+            They will be deleted automatically.
+          </p>
+        </div>
+      </div>
+
+      <div class="hero-preview">
+        <div class="video-card">
+          <div class="video-header">
+            <span>AI Generated Clip</span>
+            <span class="status">● Ready</span>
+          </div>
+
+          <div class="video-preview">
+            <div class="play-button">▶</div>
+
+            <div class="caption">
+              <span>YOUR BEST</span>
+              <strong>MOMENTS</strong>
+              <span>IN ONE SHORT</span>
+            </div>
+          </div>
+
+          <div class="video-info">
+            <span>00:40</span>
+            <span>1080 × 1920</span>
+            <span>9:16</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="section-heading">
+        <span>POWERFUL AI</span>
+        <h2>Everything you need to create Shorts</h2>
+        <p>ClipForge handles the boring editing work automatically.</p>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>AI Clip Detection</h3>
+          <p>AI analyzes your video and finds the most interesting moments automatically.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📱</div>
+          <h3>Auto 9:16 Format</h3>
+          <p>Convert landscape videos into vertical Shorts while keeping the original frame visible.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3>AI Captions</h3>
+          <p>Generate captions automatically and make important words stand out.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">✂️</div>
+          <h3>Smart Editing</h3>
+          <p>Find engaging moments and reduce unnecessary sections automatically.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3>YouTube & Facebook URLs</h3>
+          <p>Submit a supported public video link and let AI analyze its best moments.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⏱️</div>
+          <h3>30–60 Second Clips</h3>
+          <p>Generate short clips with a duration between 20 and 60 seconds.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="how-it-works" id="how-it-works">
+      <div class="section-heading">
+        <span>SIMPLE WORKFLOW</span>
+        <h2>From long video to short clip</h2>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">01</div>
+          <h3>Upload or Paste URL</h3>
+          <p>Upload your video or paste a supported YouTube/Facebook link.</p>
+        </div>
+
+        <div class="step">
+          <div class="step-number">02</div>
+          <h3>AI Analysis</h3>
+          <p>AI analyzes speech, audio, motion and scene changes to find highlights.</p>
+        </div>
+
+        <div class="step">
+          <div class="step-number">03</div>
+          <h3>Auto Edit</h3>
+          <p>AI creates 9:16 clips between 20 and 60 seconds with captions and effects.</p>
+        </div>
+
+        <div class="step">
+          <div class="step-number">04</div>
+          <h3>Download</h3>
+          <p>Download all generated clips together in one ZIP file.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" id="contact">
+      <h2>Ready to create your first Short?</h2>
+      <p>Let AI do the editing. You focus on creating.</p>
+
+      <button class="primary-btn" type="button" routerLink="/upload">
+        🚀 Start Creating
+      </button>
+    </section>
+  </main>
+
+  <footer>
+    <div class="logo">⚡ ClipForge <b>AI</b></div>
+    <p>AI-powered video clipping platform.</p>
+    <span>© 2026 ClipForge AI</span>
+  </footer>
+</div>

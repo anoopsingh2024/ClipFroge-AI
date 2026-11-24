@@ -1,0 +1,278 @@
+<div class="upload-page">
+  <div class="upload-container">
+
+    <!-- Back Button -->
+    <button class="back-btn" type="button" (click)="goBack()">
+      ← Back
+    </button>
+
+    <!-- Heading -->
+    <div class="heading">
+      <div class="badge">⚡ CLIPFORGE AI</div>
+
+      <h1>
+        Create your
+        <span>AI Shorts</span>
+      </h1>
+
+      <p>
+        Upload your long video and let AI discover
+        the best moments to create vertical shorts.
+      </p>
+    </div>
+
+    <!-- Upload Box -->
+    <div class="upload-box" [class.dragging]="isDragging" (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+      <input #fileInput type="file" accept="video/mp4,video/quicktime,video/webm" hidden
+        (change)="onFileSelected($event)" />
+
+      <div class="upload-icon">⬆</div>
+
+      <h2>Drop your video here</h2>
+      <p>or</p>
+
+      <button class="select-btn" type="button" [disabled]="uploading || processing" (click)="fileInput.click()">
+        Select Video
+      </button>
+
+      <div class="upload-info">
+        <span>MP4</span>
+        <span>MOV</span>
+        <span>WebM</span>
+        <span>Maximum 1 GB</span>
+      </div>
+    </div>
+
+    <!-- Selected File -->
+    <div class="file-card" *ngIf="selectedFile">
+
+      <div class="file-icon">🎬</div>
+
+      <div class="file-details">
+        <h3>{{ selectedFile.name }}</h3>
+        <p>{{ formatFileSize(selectedFile.size) }}</p>
+
+        <!-- Upload Progress -->
+        <div class="progress-container" *ngIf="uploading">
+          <div class="progress-bar">
+            <div class="progress" [style.width.%]="uploadProgress"></div>
+          </div>
+
+          <span>{{ uploadProgress }}%</span>
+        </div>
+
+        <!-- Upload Complete -->
+        <div class="progress-container" *ngIf="!uploading && (processing || clips.length > 0)">
+          <div class="progress-bar">
+            <div class="progress" [style.width.%]="100"></div>
+          </div>
+
+          <span>100%</span>
+        </div>
+      </div>
+
+      <button class="remove-btn" *ngIf="!uploading && !processing" type="button" (click)="removeFile()">
+        ×
+      </button>
+    </div>
+
+    <!-- Processing Status -->
+    <div class="processing-card" *ngIf="processing">
+      <div class="processing-spinner"></div>
+
+      <div>
+        <h3>AI is finding your best moments...</h3>
+        <p>Analyzing speech, audio, visual motion and scene changes.</p>
+        <p>Automatically creating vertical 9:16 clips.</p>
+        <p>Please keep this page open.</p>
+      </div>
+    </div>
+
+    <!-- Success Message -->
+    <div class="success-message" *ngIf="successMessage">
+      ✅ {{ successMessage }}
+    </div>
+
+    <!-- Error Message -->
+    <div class="error-message" *ngIf="errorMessage">
+      ⚠️ {{ errorMessage }}
+    </div>
+
+    <!-- Upload Button -->
+    <button class="upload-btn" type="button" [disabled]="!selectedFile || uploading || processing"
+      (click)="uploadVideo()">
+      <span *ngIf="!uploading && !processing && clips.length === 0">
+        🚀 Upload & Create Clips
+      </span>
+
+      <span *ngIf="uploading">
+        Uploading... {{ uploadProgress }}%
+      </span>
+
+      <span *ngIf="processing">
+        ⚙️ AI Processing...
+      </span>
+
+      <span *ngIf="clips.length > 0 && !uploading && !processing">
+        ✅ Clips Generated
+      </span>
+    </button>
+
+    <!-- AI Results Dashboard -->
+    <div class="results-section" *ngIf="clips.length > 0">
+
+      <!-- Results Header -->
+      <div class="results-header">
+        <div>
+          <div class="badge">✨ AI PROCESSING COMPLETE</div>
+          <h2>Your Highlights Are Ready!</h2>
+          <p>AI discovered these moments from your video.</p>
+        </div>
+
+        <div class="total-clips">
+          <strong>{{ clips.length }}</strong>
+          <span>Clips Created</span>
+        </div>
+      </div>
+
+      <!-- AI Timeline -->
+      <div class="timeline-card" *ngIf="timeline.length > 0">
+        <h3>📊 AI Interest Timeline</h3>
+        <p>
+          Visual representation of interesting moments in your video.
+        </p>
+
+        <div class="timeline-chart">
+          <div
+            class="timeline-bar"
+            *ngFor="let item of timeline"
+            [class.timeline-selected]="item.selectedClip"
+            [class.timeline-peak]="item.interestPeak"
+            [style.height.%]="item.interest * 100"
+            [title]="
+              'Time: ' + item.time + 's | Interest: ' +
+              (item.interest * 100).toFixed(1) + '%' +
+              (item.interestPeak ? ' | Graph peak' : '') +
+              (item.selectedClip ? ' | Selected highlight' : '')
+            "></div>
+        </div>
+
+        <div class="timeline-legend">
+          <span><i class="legend-interest"></i> Interest score</span>
+          <span><i class="legend-selected"></i> Selected clip</span>
+          <span><i class="legend-peak"></i> Graph peak</span>
+        </div>
+
+        <div class="timeline-labels">
+          <span>Start</span>
+          <span>Video Timeline</span>
+          <span>End</span>
+        </div>
+      </div>
+
+      <!-- Generated Clips -->
+      <div class="clips-grid">
+
+        <div class="clip-card" *ngFor="let clip of clips; let i = index">
+
+          <!-- Clip Header -->
+          <div class="clip-top">
+            <div class="clip-number">
+              HIGHLIGHT {{ i + 1 }}
+            </div>
+
+
+            <!-- Clip Score -->
+            <div class="clip-score">
+              ⭐
+              {{
+              ((clip.interestScore || clip.score || 0) * 100).toFixed(1)
+              }}%
+            </div>
+
+
+            <!-- Video Preview -->
+            <div class="clip-video">
+              <video [src]="clip.url" controls playsinline preload="metadata">
+                Your browser does not support video playback.
+              </video>
+            </div>
+
+            <!-- Clip Information -->
+            <div class="clip-info">
+
+              <h3>AI Highlight {{ i + 1 }}</h3>
+
+              <div class="clip-meta">
+                <span>⏱ {{ clip.duration }} sec</span>
+                <span>🎬 {{ clip.start }}s – {{ clip.end }}s</span>
+              </div>
+
+              <div class="clip-meta">
+                <span>💬 {{ clip.captionCount || 0 }} Captions</span>
+                <span>📱 9:16 Vertical</span>
+              </div>
+
+              <!-- Mood and Music -->
+              <div class="clip-meta" *ngIf="clip.mood || clip.music">
+                <span *ngIf="clip.mood">
+                  🎭 {{ clip.mood }}
+                </span>
+
+                <span *ngIf="clip.music">
+                  🎵 {{ clip.music }}
+                </span>
+              </div>
+
+              <!-- Selected Effects -->
+              <div class="effects-list" *ngIf="clip.selectedEffects?.length">
+                <span *ngFor="let effect of clip.selectedEffects">
+                  {{ effect }}
+                </span>
+              </div>
+
+              <!-- Download Button -->
+              <button class="download-btn" type="button" [disabled]="downloading" (click)="downloadClip(clip)">
+                <span *ngIf="!downloading">
+                  ⬇️ Download Highlight {{ i + 1 }}
+                </span>
+
+                <span *ngIf="downloading">
+                  Preparing Download...
+                </span>
+              </button>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="tips">
+
+        <div>
+          🧠
+          <strong>AI Highlights</strong>
+          <span>Finds interesting moments automatically.</span>
+        </div>
+
+        <div>
+          📱
+          <strong>9:16 Format</strong>
+          <span>1080 × 1920 vertical video.</span>
+        </div>
+
+        <div>
+          💬
+          <strong>AI Captions</strong>
+          <span>
+            Automatically generated captions when speech is detected.
+          </span>
+        </div>
+
+      </div>
+
+    </div>
+  </div>

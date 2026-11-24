@@ -4,6 +4,15 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { requireFirebaseAuth, AuthenticatedRequest } from '../middleware/firebase-auth';
+import {
+  completeGeneration,
+  claimUploadedVideo,
+  registerUploadedVideo,
+  refundGeneration,
+  reserveGeneration,
+  updateUploadedVideo
+} from '../services/wallet';
 const archiver: any = require('archiver');
 const router = Router();
 const BASE_DIR = path.resolve(__dirname, '../..');
@@ -22,6 +31,11 @@ const PYTHON_SCRIPT = path.join(
   'process_video.py'
 );
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+const GENERATION_ID_PATTERN = /^[\w-]{8,100}$/;
+const PUBLIC_BACKEND_URL = (
+  process.env.PUBLIC_BACKEND_URL ||
+  `http://localhost:${process.env.PORT || 5000}`
+).replace(/\/$/, '');
 const DOWNLOAD_TIMEOUT_MS = 20 * 60 * 1000;
 const PROCESS_TIMEOUT_MS = 60 * 60 * 1000;
 const JOB_EXPIRY_MS = 30 * 60 * 1000;
@@ -611,14 +625,65 @@ async function processInputVideo(
   inputPath: string,
   res: Response,
   source: 'upload' | 'url',
-  platform?: string
+  platform?: string,
+  userId?: string,
+  generationId?: string
 ): Promise<void> {
+  const uploadedFilename = source === 'upload' ? path.basename(inputPath) : null;
+  const markUpload = async (status: 'FAILED' | 'COMPLETED', jobId?: string) => {
+    if (!uploadedFilename) return;
+    try {
+      await updateUploadedVideo(uploadedFilename, status, jobId);
+    } catch (error) {
+      console.error('[UPLOAD] Could not update upload status:', error);
+    }
+  };
   const dependencyError = checkProcessingDependencies();
   if (dependencyError) {
+    await markUpload('FAILED');
     await removeFile(inputPath);
     res.status(500).json({
       success: false,
       message: dependencyError
+    });
+    return;
+  }
+  if (!userId || !generationId) {
+    await markUpload('FAILED');
+    await removeFile(inputPath);
+    res.status(401).json({
+      success: false,
+      message: 'Please sign in before generating clips.'
+    });
+    return;
+  }
+  let reservation;
+  try {
+    reservation = await reserveGeneration(userId, generationId);
+  } catch (error) {
+    await removeFile(inputPath);
+    await markUpload('FAILED');
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'INSUFFICIENT_COINS') {
+      res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_COINS',
+        message: 'Insufficient coins. Please purchase coins or upgrade to Premium.'
+      });
+      return;
+    }
+    if (/already submitted/i.test(message)) {
+      res.status(409).json({ success: false, message });
+      return;
+    }
+    if (/register an account|valid generation request/i.test(message)) {
+      res.status(400).json({ success: false, message });
+      return;
+    }
+    console.error('[WALLET] Could not reserve generation:', message);
+    res.status(503).json({
+      success: false,
+      message: 'Unable to verify your wallet right now. Please try again.'
     });
     return;
   }
@@ -651,9 +716,9 @@ async function processInputVideo(
       const clipDownloadPath =
         `/api/videos/clip-download/${jobId}/${encodeURIComponent(filename)}`;
       const absoluteClipPath =
-        `http://localhost:5000${clipPath}`;
+        `${PUBLIC_BACKEND_URL}${clipPath}`;
       const absoluteDownloadPath =
-        `http://localhost:5000${clipDownloadPath}`;
+        `${PUBLIC_BACKEND_URL}${clipDownloadPath}`;
       return {
         filename,
         // These paths are used by Angular for preview and download.*
@@ -683,6 +748,25 @@ async function processInputVideo(
         features: clip.features ?? null
       };
     });
+    await markUpload('COMPLETED', jobId);
+    await completeGeneration(
+      reservation,
+      clips.length,
+      jobId,
+      clips.map((clip: {
+        filename: string;
+        duration: number;
+        start: number;
+        end: number;
+        interestScore: number;
+      }) => ({
+        filename: clip.filename,
+        duration: Number(clip.duration || 0),
+        start: Number(clip.start || 0),
+        end: Number(clip.end || 0),
+        interestScore: Number(clip.interestScore || 0)
+      }))
+    );
     console.log(
       `[CLIPFORGE] ${clips.length} clips ready. Job: ${jobId}`
     );
@@ -701,7 +785,7 @@ async function processInputVideo(
       clips,
       jobId,
       downloadUrl: `/api/videos/download/${jobId}`,
-      downloadUrlAbsolute: `http://localhost:5000/api/videos/download/${jobId}`,
+      downloadUrlAbsolute: `${PUBLIC_BACKEND_URL}/api/videos/download/${jobId}`,
       highlightCount: aiResult.totalClips ?? clips.length,
       highlights: clips,
       expiresInMinutes: 30,
@@ -711,6 +795,12 @@ async function processInputVideo(
   } catch (error) {
     if (generatedFilenames.length) {
       await removeGeneratedFiles(generatedFilenames);
+    }
+    await markUpload('FAILED');
+    try {
+      await refundGeneration(reservation, 'Video processing failed.');
+    } catch (refundError) {
+      console.error('[WALLET] Failed to refund generation:', refundError);
     }
     const message =
       error instanceof Error ? error.message : String(error);
@@ -733,31 +823,56 @@ async function processInputVideo(
 // Upload local video.*
 router.post(
   '/upload',
+  requireFirebaseAuth,
   upload.single('video'),
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({
         success: false,
         message: 'No video file was uploaded.'
       });
     }
-    return res.status(200).json({
-      success: true,
-      message: 'Video uploaded successfully.',
-      video: {
-        originalName: req.file.originalname,
-        filename: req.file.filename,
-        size: req.file.size,
-        mimeType: req.file.mimetype
+    try {
+      const authUser = (req as AuthenticatedRequest).authUser;
+      if (!authUser) {
+        await removeFile(req.file.path);
+        return res.status(401).json({ success: false, message: 'Please sign in to upload videos.' });
       }
-    });
+      await registerUploadedVideo(authUser.uid, req.file.filename, req.file.size);
+      return res.status(200).json({
+        success: true,
+        message: 'Video uploaded successfully.',
+        video: {
+          originalName: req.file.originalname,
+          filename: req.file.filename,
+          size: req.file.size,
+          mimeType: req.file.mimetype
+        }
+      });
+    } catch (error) {
+      await removeFile(req.file.path);
+      console.error('[UPLOAD] Could not register uploaded video:', error);
+      return res.status(503).json({
+        success: false,
+        message: 'The upload could not be securely registered. Please try again.'
+      });
+    }
   }
 );
 // Process uploaded video.*
 router.post(
   '/process/:filename',
+  requireFirebaseAuth,
   async (req: Request, res: Response) => {
+    const authUser = (req as AuthenticatedRequest).authUser;
     const filename = getRouteParam(req.params.filename);
+    const generationId = req.header('Idempotency-Key') || '';
+    if (!GENERATION_ID_PATTERN.test(generationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid generation request ID is required.'
+      });
+    }
     if (!isSafeLocalFilename(filename)) {
       return res.status(400).json({
         success: false,
@@ -771,13 +886,29 @@ router.post(
         message: 'Uploaded video not found.'
       });
     }
-    await processInputVideo(inputPath, res, 'upload');
+    const claimed = await claimUploadedVideo(authUser!.uid, filename, generationId);
+    if (!claimed) {
+      return res.status(404).json({
+        success: false,
+        message: 'Uploaded video not found for this account, or it is already processing.'
+      });
+    }
+    await processInputVideo(inputPath, res, 'upload', undefined, authUser?.uid, generationId);
   }
 );
 // Process public YouTube or Facebook URL.
 router.post(
   '/process-url',
+  requireFirebaseAuth,
   async (req: Request, res: Response) => {
+    const authUser = (req as AuthenticatedRequest).authUser;
+    const generationId = req.header('Idempotency-Key') || '';
+    if (!GENERATION_ID_PATTERN.test(generationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid generation request ID is required.'
+      });
+    }
     const validation = validateVideoUrl(req.body?.url);
     if (
       !validation.valid ||
@@ -849,7 +980,9 @@ router.post(
         downloadedInputPath,
         res,
         'url',
-        validation.platform
+        validation.platform,
+        authUser?.uid,
+        generationId
       );
     } catch (error) {
       await removeFile(downloadedInputPath);

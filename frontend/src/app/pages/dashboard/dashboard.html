@@ -1,0 +1,130 @@
+<main class="dashboard-shell">
+  <header class="topbar">
+    <a class="brand" routerLink="/">⚡ ClipForge <b>AI</b></a>
+    <nav>
+      <a routerLink="/upload">Create clips</a>
+      <button type="button" class="logout" (click)="logout()">Log out</button>
+    </nav>
+  </header>
+
+  <section class="dashboard-content" *ngIf="!loading && account as user">
+    <div class="welcome-row">
+      <div>
+        <div class="eyebrow">YOUR CREATOR ACCOUNT</div>
+        <h1>Welcome, {{ user.name }}</h1>
+        <p>{{ user.phoneNumber }} <span class="verified">✓ Verified</span></p>
+      </div>
+      <span class="premium-badge" *ngIf="user.isPremium">✦ PREMIUM MEMBER</span>
+    </div>
+
+    <div class="notice success" *ngIf="successMessage">{{ successMessage }}</div>
+    <div class="notice error" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+    <section class="stats-grid">
+      <article class="stat-card wallet-card">
+        <span class="stat-label">AVAILABLE COINS</span>
+        <strong>{{ user.coins }}</strong>
+        <span class="stat-note">{{ user.isPremium ? 'Coins stay in your wallet while Premium is active.' : '10 coins per successful generation' }}</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">CLIPS GENERATED</span>
+        <strong>{{ user.totalClipsGenerated }}</strong>
+        <span class="stat-note">Successful clips created</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">COINS USED</span>
+        <strong>{{ user.coinsUsed }}</strong>
+        <span class="stat-note">Failed generations are refunded</span>
+      </article>
+      <article class="stat-card plan-card">
+        <span class="stat-label">SUBSCRIPTION</span>
+        <strong [class.plan-active]="user.isPremium">
+          {{ user.isPremium ? 'Premium' : (user.premiumExpired ? 'Expired' : 'Free') }}
+        </strong>
+        <span class="stat-note" *ngIf="user.isPremium">Unlimited clips · Expires {{ formatDate(user.subscriptionExpiry) }}</span>
+        <span class="stat-note" *ngIf="user.premiumExpired">Premium expired · Your coins remain available</span>
+        <span class="stat-note" *ngIf="!user.isPremium && !user.premiumExpired">Pay with coins or upgrade anytime</span>
+      </article>
+    </section>
+
+    <section class="premium-callout" *ngIf="!user.isPremium">
+      <div>
+        <span class="eyebrow">CLIPFORGE PREMIUM</span>
+        <h2>{{ user.premiumExpired ? 'Renew Premium' : 'Create without limits' }}</h2>
+        <p>Unlimited AI clip generation, automatic editing, music, filters and animations for {{ premiumDays }} days.</p>
+      </div>
+      <div class="premium-price">
+        <strong>₹{{ premiumPrice }}</strong>
+        <span>/ {{ premiumDays }} days</span>
+        <button type="button" (click)="upgradePremium()" [disabled]="checkoutBusy">
+          {{ checkoutBusy ? 'Opening checkout…' : (user.premiumExpired ? 'Renew Premium' : 'Upgrade to Premium') }}
+        </button>
+      </div>
+    </section>
+
+    <section class="packages-section" *ngIf="!user.isPremium">
+      <div class="section-title">
+        <div>
+          <div class="eyebrow">FLEXIBLE TOP-UPS</div>
+          <h2>Buy Coins</h2>
+        </div>
+        <span>10 coins per successful clip</span>
+      </div>
+      <div class="package-grid">
+        <article class="package-card" *ngFor="let pack of packages">
+          <strong>{{ pack.label }}</strong>
+          <span>{{ pack.coins }} coins</span>
+          <button type="button" (click)="buyCoins(pack)" [disabled]="checkoutBusy">
+            Buy for ₹{{ pack.priceRupees }}
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <div class="history-grid">
+      <section class="history-card">
+        <div class="section-title compact">
+          <div><div class="eyebrow">WALLET</div><h2>Transaction history</h2></div>
+        </div>
+        <div class="empty-state" *ngIf="!transactions.length">Your wallet transactions will appear here.</div>
+        <div class="transaction-row" *ngFor="let item of transactions">
+          <div>
+            <strong>{{ item.reason }}</strong>
+            <span>{{ formatDate(item.createdAt) }} <i *ngIf="item.status">· {{ item.status }}</i></span>
+          </div>
+          <b [class.credit]="item.type !== 'DEBIT'">
+            <ng-container *ngIf="item.currency === 'INR'; else coinAmount">₹{{ item.amount }} paid</ng-container>
+            <ng-template #coinAmount>
+              {{ item.type === 'DEBIT' ? '−' : '+' }}{{ item.amount }}
+            </ng-template>
+          </b>
+        </div>
+      </section>
+
+      <section class="history-card">
+        <div class="section-title compact">
+          <div><div class="eyebrow">PROCESSING</div><h2>Recent generations</h2></div>
+        </div>
+        <div class="empty-state" *ngIf="!history.length">Your completed clip generations will appear here.</div>
+        <div class="transaction-row" *ngFor="let item of history">
+          <div>
+            <strong>{{ item.clipCount }} clip(s) · {{ item.premium ? 'Premium' : item.charge + ' coins' }}</strong>
+            <span>{{ formatDate(item.completedAt) }}</span>
+          </div>
+          <a
+            class="complete-pill"
+            *ngIf="isPreviewAvailable(item)"
+            [href]="previewUrl(item)"
+            target="_blank"
+            rel="noopener">
+            Preview
+          </a>
+          <span class="complete-pill" *ngIf="!isPreviewAvailable(item)">Complete</span>
+        </div>
+      </section>
+    </div>
+    <p class="payment-note">Payments are securely processed by Razorpay. Coin and Premium benefits are applied only after server-side payment verification.</p>
+  </section>
+
+  <div class="loading-state" *ngIf="loading"><span></span>Loading your account…</div>
+</main>

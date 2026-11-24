@@ -1,0 +1,79 @@
+<main class="admin-shell">
+  <header class="admin-nav">
+    <a routerLink="/" class="brand">⚡ ClipForge <b>AI</b><span> / Admin</span></a>
+    <nav><a routerLink="/dashboard">Dashboard</a><button type="button" (click)="logout()">Log out</button></nav>
+  </header>
+
+  <section class="admin-content">
+    <div class="page-heading">
+      <div><div class="eyebrow">RESTRICTED MANAGEMENT</div><h1>Admin console</h1></div>
+      <button type="button" class="refresh" (click)="load()" [disabled]="busy">Refresh</button>
+    </div>
+    <div class="alert error" *ngIf="errorMessage">{{ errorMessage }}</div>
+    <div class="alert success" *ngIf="successMessage">{{ successMessage }}</div>
+
+    <div class="stat-grid">
+      <article><span>Registered users</span><strong>{{ stats.registeredUsers }}</strong></article>
+      <article><span>Captured payments</span><strong>{{ stats.capturedPayments }}</strong></article>
+      <article><span>Successful generations</span><strong>{{ stats.successfulGenerations }}</strong></article>
+    </div>
+
+    <section class="panel">
+      <div class="panel-heading"><div><div class="eyebrow">WALLET SUPPORT</div><h2>Manual coin adjustment</h2></div></div>
+      <form class="adjust-form" (ngSubmit)="adjustCoins()">
+        <label>User
+          <select name="userId" [(ngModel)]="selectedUserId" required>
+            <option *ngFor="let user of users" [value]="user.id">{{ user.name }} · {{ user.phoneNumber }} · {{ user.coins }} coins</option>
+          </select>
+        </label>
+        <label>Amount (+ credit / − debit)
+          <input name="amount" type="number" step="1" min="-100000" max="100000" [(ngModel)]="adjustmentAmount" required />
+        </label>
+        <label>Audit reason
+          <input name="reason" type="text" minlength="5" maxlength="300" [(ngModel)]="adjustmentReason" placeholder="Required audit reason" required />
+        </label>
+        <button type="submit" [disabled]="busy || !users.length">Apply adjustment</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><div class="eyebrow">CATALOG</div><h2>Coin packages</h2></div><button type="button" (click)="savePackages()" [disabled]="busy">Save packages</button></div>
+      <div class="package-table">
+        <div class="package-row package-header"><span>Package ID</span><span>Label</span><span>Coins</span><span>Price (₹)</span></div>
+        <div class="package-row" *ngFor="let pack of packages">
+          <input aria-label="Package ID" [(ngModel)]="pack.id" />
+          <input aria-label="Package label" [(ngModel)]="pack.label" />
+          <input aria-label="Coin amount" type="number" min="1" step="1" [(ngModel)]="pack.coins" />
+          <input aria-label="Package price rupees" type="number" min="1" step="1" [(ngModel)]="pack.priceRupees" />
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><div class="eyebrow">ACCOUNT DIRECTORY</div><h2>Users</h2></div></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Name / UID</th><th>Phone</th><th>Coins</th><th>Clips</th><th>Plan</th><th>Expiry</th></tr></thead>
+          <tbody><tr *ngFor="let user of users">
+            <td>{{ user.name }}<small>{{ user.id }}</small></td>
+            <td>{{ user.phoneNumber }}</td><td>{{ user.coins }}</td><td>{{ user.totalClipsGenerated }}</td>
+            <td>{{ user.isPremium ? 'Premium' : 'Free' }}</td>
+            <td>{{ user.subscriptionExpiry ? formatDate(user.subscriptionExpiry) : '—' }}</td>
+          </tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><div class="eyebrow">RAZORPAY</div><h2>Recent payments</h2></div></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Payment ID</th><th>User</th><th>Order</th><th>Amount</th><th>Type</th><th>Date</th></tr></thead>
+          <tbody><tr *ngFor="let payment of payments">
+            <td>{{ payment.id }}</td><td>{{ payment.userId }}</td><td>{{ payment.razorpayOrderId }}</td>
+            <td>₹{{ payment.amount / 100 }}</td><td>{{ payment.paymentType }}</td><td>{{ formatDate(payment.createdAt) }}</td>
+          </tr></tbody>
+        </table>
+        <p class="empty" *ngIf="!payments.length">No captured payments yet.</p>
+      </div>
+    </section>
+  </section>
+</main>
