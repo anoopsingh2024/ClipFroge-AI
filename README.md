@@ -26,6 +26,17 @@ purple/pink, and other combinations), blended with the blurred source layer.
 The selected palette is returned as `backgroundStyle` and `backgroundColors`
 in each clip's metadata.
 
+## Hindi and English captions
+
+Speech recognition uses Faster-Whisper's multilingual transcription mode with
+language auto-detection, word timestamps, VAD, deterministic decoding, and a
+beam size of 5. The default model is `small` instead of `tiny` to improve Hindi,
+English, and mixed-language recognition. Set `CLIPFORGE_WHISPER_MODEL=medium`
+in `backend/.env` for more accurate transcription when the machine has enough
+memory and processing time; the model is downloaded the first time it runs.
+Speech recognition cannot guarantee a completely error-free transcript, so
+review captions before publishing when exact wording is important.
+
 Available automatic grades include cinematic teal/orange, Hollywood warm,
 dark cinematic, moody blue, film look, vintage cinema, dramatic contrast,
 vibrant, natural, clean creator, travel, professional portrait, gaming

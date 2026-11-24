@@ -34,7 +34,7 @@ MIN_CLIP_DURATION = 30.0
 MAX_CLIP_DURATION = 60.0
 CANDIDATE_STEP = 8.0
 MIN_INTEREST_SCORE = float(os.environ.get("CLIPFORGE_MIN_SCORE", "16"))
-WHISPER_MODEL_NAME = os.environ.get("CLIPFORGE_WHISPER_MODEL", "tiny")
+WHISPER_MODEL_NAME = os.environ.get("CLIPFORGE_WHISPER_MODEL", "small")
 PROCESS_DEADLINE = None
 MUSIC_SELECTION_COUNTER = 0
 
@@ -414,8 +414,17 @@ def transcribe_selected_clips(video_path, clips, has_audio):
                 "-c:a", "pcm_s16le", str(wav_path)
             ])
             segments, info = model.transcribe(
-                str(wav_path), language=None, word_timestamps=True,
-                vad_filter=True, beam_size=1, condition_on_previous_text=False
+                str(wav_path),
+                language=None,
+                task="transcribe",
+                word_timestamps=True,
+                vad_filter=True,
+                beam_size=5,
+                temperature=0.0,
+                condition_on_previous_text=True,
+                compression_ratio_threshold=2.4,
+                log_prob_threshold=-1.0,
+                no_speech_threshold=0.6,
             )
             language = getattr(info, "language", None) or language
             for segment in segments:
