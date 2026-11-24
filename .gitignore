@@ -1,0 +1,17 @@
+﻿node_modules/
+dist/
+.angular/
+.env
+.env.*
+!.env.example
+ai-venv/
+venv/
+__pycache__/
+*.pyc
+uploads/
+outputs/
+*.mp4
+*.mp3
+*.wav
+*.log
+.DS_Store

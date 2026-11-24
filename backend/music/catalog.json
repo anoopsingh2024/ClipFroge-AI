@@ -1,0 +1,18 @@
+[
+  {
+    "filename": "motivational.mp3",
+    "title": "Motivational Beat",
+    "mood": "motivational",
+    "licenseType": "CC0",
+    "commercial_use": true,
+    "attribution": ""
+  },
+  {
+    "filename": "cinematic.mp3",
+    "title": "Cinematic Background",
+    "mood": "cinematic",
+    "licenseType": "PUBLIC_DOMAIN",
+    "commercial_use": true,
+    "attribution": ""
+  }
+]

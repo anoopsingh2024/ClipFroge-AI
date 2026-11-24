@@ -1,0 +1,725 @@
+import argparse
+import json
+import math
+import os
+import subprocess
+import sys
+import wave
+import struct
+import time
+from pathlib import Path
+
+import cv2
+from faster_whisper import WhisperModel
+
+# ============================================================
+# CLIPFORGE AI - AUTO HIGHLIGHTS + MUSIC + FILTERS + ANIMATION
+# ============================================================
+BASE_DIR = Path(__file__).resolve().parent.parent
+FFMPEG = os.environ.get("CLIPFORGE_FFMPEG", r"C:\ffmpeg\bin\ffmpeg.exe")
+FFPROBE = os.environ.get("CLIPFORGE_FFPROBE", r"C:\ffmpeg\bin\ffprobe.exe")
+OUTPUT_DIR = BASE_DIR / "outputs"
+TEMP_DIR = OUTPUT_DIR / "_analysis"
+MUSIC_DIR = BASE_DIR / "music"
+MUSIC_CATALOG = MUSIC_DIR / "catalog.json"
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
+MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+
+MAX_CLIPS = 10
+MIN_CLIP_DURATION = 20.0
+MAX_CLIP_DURATION = 60.0
+CANDIDATE_STEP = 8.0
+MIN_INTEREST_SCORE = float(os.environ.get("CLIPFORGE_MIN_SCORE", "16"))
+WHISPER_MODEL_NAME = os.environ.get("CLIPFORGE_WHISPER_MODEL", "tiny")
+PROCESS_DEADLINE = None
+
+EFFECT_PRESETS = {
+    "natural_color": "eq=saturation=1.06:contrast=1.03",
+    "cinematic_warm": "eq=contrast=1.06:saturation=1.08:brightness=0.01,colorbalance=rs=0.02:bs=-0.01",
+    "bright_lift": "eq=brightness=0.035:contrast=1.03",
+    "soft_sharpen": "unsharp=5:5:0.35:3:3:0.12",
+    "punchy": "eq=contrast=1.10:saturation=1.12",
+    "vivid": "eq=saturation=1.14:contrast=1.04",
+    "soft_warm": "colorbalance=rs=0.02:gs=0.008:bs=-0.012",
+    "cool_cinematic": "eq=contrast=1.05:saturation=0.96,colorbalance=bs=0.025:rs=-0.01",
+}
+
+INTEREST_WORDS = {
+    "amazing", "important", "secret", "why", "how", "best", "worst",
+    "never", "always", "mistake", "problem", "solution", "truth",
+    "finally", "surprise", "wow", "unbelievable", "incredible",
+    "देखो", "क्यों", "कैसे", "सच", "गलती", "जरूरी", "कमाल",
+    "शानदार", "खास", "ध्यान", "अरे", "वाह"
+}
+MOOD_WORDS = {
+    "funny": {"funny", "joke", "laugh", "comedy", "haha", "मजेदार", "हंसी"},
+    "motivational": {"success", "goal", "motivation", "believe", "hard", "work",
+                     "मेहनत", "सफलता", "मंजिल", "हौसला"},
+    "cinematic": {"amazing", "beautiful", "incredible", "story", "emotional",
+                  "खूबसूरत", "भावुक", "कहानी"},
+    "calm": {"peace", "relax", "calm", "nature", "शांति", "आराम", "प्रकृति"},
+}
+
+
+def log(message):
+    print(message, file=sys.stderr, flush=True)
+
+
+def check_deadline():
+    if PROCESS_DEADLINE is not None and time.monotonic() >= PROCESS_DEADLINE:
+        raise TimeoutError("ClipForge processing time limit reached.")
+
+
+def run_command(command):
+    check_deadline()
+    timeout = None if PROCESS_DEADLINE is None else max(1, PROCESS_DEADLINE - time.monotonic())
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("Processing time limit reached during FFmpeg operation.") from exc
+    if result.returncode != 0:
+        details = result.stderr or result.stdout or "Unknown FFmpeg error"
+        raise RuntimeError(details[-7000:])
+    return result.stdout
+
+
+def probe_streams(video_path):
+    raw = run_command([
+        FFPROBE, "-v", "error", "-show_streams", "-show_format",
+        "-of", "json", str(video_path)
+    ])
+    data = json.loads(raw)
+    streams = data.get("streams", [])
+    video_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
+    if not video_stream:
+        raise RuntimeError("Input does not contain a video stream.")
+    return data, video_stream, any(s.get("codec_type") == "audio" for s in streams)
+
+
+def get_video_duration(video_path):
+    raw = run_command([
+        FFPROBE, "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)
+    ]).strip()
+    duration = float(raw)
+    if not math.isfinite(duration) or duration <= 0:
+        raise RuntimeError("Could not determine video duration.")
+    return duration
+
+
+def normalized(values):
+    if not values:
+        return []
+    low, high = min(values), max(values)
+    if high - low < 1e-9:
+        return [0.0] * len(values)
+    return [max(0.0, min(1.0, (float(v) - low) / (high - low))) for v in values]
+
+
+def second_range(start, end, length):
+    first = max(0, int(math.floor(start)))
+    last = min(length, int(math.ceil(end)))
+    return range(first, max(first, last))
+
+
+def extract_audio_energy(video_path, duration, has_audio):
+    count = int(math.ceil(duration))
+    if not has_audio:
+        return [0.0] * count
+    wav_path = TEMP_DIR / (Path(video_path).stem + "_analysis.wav")
+    try:
+        run_command([
+            FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-i", str(video_path),
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav_path)
+        ])
+        values = []
+        with wave.open(str(wav_path), "rb") as wav:
+            rate = wav.getframerate()
+            for _ in range(count):
+                frames = wav.readframes(rate)
+                if not frames:
+                    values.append(0.0)
+                    continue
+                usable = len(frames) // 2
+                samples = struct.unpack("<" + "h" * usable, frames[:usable * 2])
+                values.append(math.sqrt(sum(x * x for x in samples) / max(1, len(samples))))
+        return values
+    except Exception as exc:
+        log("Audio analysis skipped: " + str(exc))
+        return [0.0] * count
+    finally:
+        wav_path.unlink(missing_ok=True)
+
+
+def analyze_visual_motion(video_path, duration):
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError("OpenCV could not open the input video.")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    count = int(math.ceil(duration))
+    motion = [0.0] * count
+    previous = None
+    step = 8 if duration < 600 else 12
+    try:
+        for sec in range(0, count, step):
+            check_deadline()
+            frame_no = min(int(sec * fps), max(0, total_frames - 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            gray = cv2.cvtColor(cv2.resize(frame, (160, 90)), cv2.COLOR_BGR2GRAY)
+            score = 0.0 if previous is None else float(cv2.absdiff(gray, previous).mean())
+            for offset in range(step):
+                if sec + offset < count:
+                    motion[sec + offset] = score
+            previous = gray
+    finally:
+        cap.release()
+    return motion
+
+
+def detect_scenes(video_path, duration):
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return []
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    step = 8 if duration >= 600 else 5
+    interval = max(1, int(fps * step))
+    previous, markers = None, []
+    try:
+        for frame_no in range(0, max(total, 1), interval):
+            check_deadline()
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            gray = cv2.cvtColor(cv2.resize(frame, (96, 54)), cv2.COLOR_BGR2GRAY)
+            if previous is not None and cv2.absdiff(gray, previous).mean() > 32:
+                markers.append(frame_no / fps)
+            previous = gray
+    finally:
+        cap.release()
+    log(f"Scene changes detected: {len(markers)}")
+    return markers
+
+
+def build_timeline(duration, energy, motion, scene_markers):
+    bins = int(math.ceil(duration))
+    energy_norm = normalized((energy + [0.0] * bins)[:bins])
+    motion_norm = normalized((motion + [0.0] * bins)[:bins])
+    scene_signal = [0.0] * bins
+    for marker in scene_markers:
+        idx = int(marker)
+        if 0 <= idx < bins:
+            scene_signal[idx] = 1.0
+            if idx > 0:
+                scene_signal[idx - 1] = max(scene_signal[idx - 1], 0.5)
+    timeline = []
+    for sec in range(bins):
+        score = 0.45 * energy_norm[sec] + 0.35 * motion_norm[sec] + 0.20 * scene_signal[sec]
+        timeline.append({
+            "time": sec, "speech": round(energy_norm[sec], 4),
+            "audioEnergy": round(energy_norm[sec], 4),
+            "visualMotion": round(motion_norm[sec], 4),
+            "sceneChange": round(scene_signal[sec], 4),
+            "keywordCue": 0.0, "interest": round(score, 4)
+        })
+    return timeline
+
+
+def score_candidates(duration, timeline):
+    if duration < MIN_CLIP_DURATION or not timeline:
+        return []
+    windows = []
+    if duration <= MAX_CLIP_DURATION:
+        windows = [(0.0, duration)]
+    else:
+        lengths = [20.0, 25.0, 30.0, 40.0, 45.0, 50.0, 60.0]
+        start = 0.0
+        while start <= duration - MIN_CLIP_DURATION:
+            for length in lengths:
+                end = min(duration, start + length)
+                if MIN_CLIP_DURATION <= end - start <= MAX_CLIP_DURATION:
+                    windows.append((start, end))
+            start += CANDIDATE_STEP
+
+    candidates = []
+    for start, end in windows:
+        rows = [timeline[i] for i in second_range(start, end, len(timeline))]
+        if not rows:
+            continue
+        values = sorted(row["interest"] for row in rows)
+        mean_score = sum(values) / len(values)
+        peak_score = values[min(len(values) - 1, int(len(values) * 0.75))]
+        active_ratio = sum(v >= 0.20 for v in values) / len(values)
+        speech_score = sum(r["speech"] for r in rows) / len(rows)
+        score = 0.55 * mean_score + 0.20 * peak_score + 0.15 * active_ratio + 0.10 * speech_score
+        score_percent = score * 100
+        if score_percent < MIN_INTEREST_SCORE:
+            continue
+        candidates.append({
+            "start": round(start, 2), "end": round(end, 2),
+            "duration": round(end - start, 2), "interestScore": round(score_percent, 1),
+            "features": {
+                "meanInterest": round(mean_score, 3), "peakInterest": round(peak_score, 3),
+                "activeRatio": round(active_ratio, 3), "speech": round(speech_score, 3)
+            }
+        })
+
+    candidates.sort(key=lambda x: x["interestScore"], reverse=True)
+    selected = []
+    for item in candidates:
+        if any(item["start"] < old["end"] + 1.5 and item["end"] > old["start"] - 1.5 for old in selected):
+            continue
+        selected.append(item)
+        if len(selected) >= MAX_CLIPS:
+            break
+    selected.sort(key=lambda x: x["start"])
+    return selected
+
+
+def transcribe_selected_clips(video_path, clips, has_audio):
+    if not has_audio or not clips:
+        return [], "none"
+    log(f"Loading Whisper model: {WHISPER_MODEL_NAME}")
+    model = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
+    transcript, language = [], "unknown"
+    for index, clip in enumerate(clips, 1):
+        check_deadline()
+        wav_path = TEMP_DIR / f"{Path(video_path).stem}-clip-{index:02d}.wav"
+        try:
+            run_command([
+                FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                "-ss", str(clip["start"]), "-i", str(video_path),
+                "-t", str(clip["duration"]), "-vn", "-ac", "1", "-ar", "16000",
+                "-c:a", "pcm_s16le", str(wav_path)
+            ])
+            segments, info = model.transcribe(
+                str(wav_path), language=None, word_timestamps=True,
+                vad_filter=True, beam_size=1, condition_on_previous_text=False
+            )
+            language = getattr(info, "language", None) or language
+            for segment in segments:
+                words = [{
+                    "text": word.word.strip(),
+                    "start": float(word.start) + clip["start"],
+                    "end": float(word.end) + clip["start"]
+                } for word in (segment.words or [])]
+                transcript.append({
+                    "start": float(segment.start) + clip["start"],
+                    "end": float(segment.end) + clip["start"],
+                    "text": segment.text.strip(), "words": words
+                })
+        finally:
+            wav_path.unlink(missing_ok=True)
+    return transcript, language
+
+
+def ass_time(seconds):
+    total = max(0, int(round(seconds * 100)))
+    return f"{total // 360000}:{(total % 360000) // 6000:02d}:{(total % 6000) // 100:02d}.{total % 100:02d}"
+
+
+def escape_ass(value):
+    return value.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", " ")
+
+
+def create_ass_captions(transcript, clip_start, clip_end, ass_path):
+    header = r"""[Script Info]
+Title: ClipForge AI Captions
+ScriptType: v4.00+
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+PlayResX: 720
+PlayResY: 1280
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,47,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,43,43,220,1
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    lines = [header]
+    count = 0
+    for segment in transcript:
+        words = [w for w in segment.get("words", []) if w["end"] > clip_start and w["start"] < clip_end]
+        for offset in range(0, len(words), 4):
+            group = words[offset:offset + 4]
+            if not group:
+                continue
+            start = max(group[0]["start"], clip_start) - clip_start
+            end = min(group[-1]["end"], clip_end) - clip_start
+            if end <= start:
+                continue
+            parts = []
+            for word in group:
+                centiseconds = max(1, int((word["end"] - word["start"]) * 100))
+                parts.append(rf"{{\kf{centiseconds}}}{escape_ass(word['text'])}")
+            caption = r"{\an2\bord5\shad3\fscx88\fscy88\t(0,120,\fscx108\fscy108)\t(120,220,\fscx100\fscy100)}" + " ".join(parts)
+            lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Default,,0,0,0,,{caption}")
+            count += 1
+    ass_path.write_text("\n".join(lines), encoding="utf-8-sig")
+    return count
+
+
+def escape_filter_path(file_path):
+    value = str(Path(file_path).resolve()).replace("\\", "/")
+    return value.replace(":", r"\:").replace("'", r"\'")
+
+
+def analyze_profile(video_path):
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError("Could not analyze video profile.")
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    samples = []
+    sample_count = min(12, max(1, total))
+    try:
+        for i in range(sample_count):
+            pos = int(i * max(total - 1, 0) / max(sample_count - 1, 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
+            ok, frame = cap.read()
+            if ok:
+                small = cv2.resize(frame, (160, 90))
+                hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                samples.append((float(hsv[:, :, 2].mean()), float(hsv[:, :, 1].mean()), float(gray.std())))
+    finally:
+        cap.release()
+    if samples:
+        brightness = sum(x[0] for x in samples) / len(samples)
+        saturation = sum(x[1] for x in samples) / len(samples)
+        contrast = sum(x[2] for x in samples) / len(samples)
+    else:
+        brightness, saturation, contrast = 128.0, 100.0, 50.0
+    return {
+        "width": width, "height": height, "fps": round(fps, 2),
+        "brightness": round(brightness, 2), "saturation": round(saturation, 2),
+        "contrast": round(contrast, 2)
+    }
+
+
+def choose_effects(profile, interest_score, mood):
+    effects = []
+    if profile["brightness"] < 85:
+        effects.append("bright_lift")
+    if profile["saturation"] < 65:
+        effects.append("vivid")
+    if mood == "cinematic":
+        effects.append("cinematic_warm")
+    elif mood == "calm":
+        effects.append("soft_warm")
+    elif mood == "funny":
+        effects.append("natural_color")
+    elif mood == "motivational" or interest_score >= 75:
+        effects.append("punchy")
+    if profile["contrast"] < 35:
+        effects.append("soft_sharpen")
+    return list(dict.fromkeys(effects or ["natural_color"]))[:2]
+
+
+def classify_mood(transcript, clip, timeline):
+    text = " ".join(
+        seg.get("text", "").lower() for seg in transcript
+        if seg["end"] > clip["start"] and seg["start"] < clip["end"]
+    )
+    tokens = set(text.split())
+    for mood in ("funny", "motivational", "cinematic", "calm"):
+        if tokens.intersection(MOOD_WORDS[mood]) or any(
+            cue in text for cue in MOOD_WORDS[mood] if len(cue) > 3
+        ):
+            return mood
+    rows = [r for r in timeline if clip["start"] <= r["time"] < clip["end"]]
+    if not rows:
+        return "cinematic"
+    avg_motion = sum(r["visualMotion"] for r in rows) / len(rows)
+    avg_energy = sum(r["audioEnergy"] for r in rows) / len(rows)
+    if avg_motion > 0.55 or avg_energy > 0.60:
+        return "motivational"
+    if avg_motion < 0.20 and avg_energy < 0.20:
+        return "calm"
+    return "cinematic"
+
+
+def is_valid_audio_file(path):
+    """Return True only when FFprobe confirms the file has an audio stream."""
+    if not path.is_file():
+        return False
+    try:
+        raw = subprocess.run(
+            [FFPROBE, "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_type", "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15
+        )
+        return raw.returncode == 0 and "audio" in raw.stdout.lower()
+    except Exception as exc:
+        log("Music validation failed: " + str(exc))
+        return False
+
+
+def choose_music_track(mood):
+    """
+    Prefer eligible tracks from catalog.json.
+    If no catalog track is eligible, use the user's local motivational.mp3.
+    The fallback's license is not assumed; user must verify usage rights.
+    """
+    allowed = {"CC0", "PUBLIC_DOMAIN", "ROYALTY_FREE_COMMERCIAL"}
+    valid = []
+
+    if MUSIC_CATALOG.is_file():
+        try:
+            catalog = json.loads(MUSIC_CATALOG.read_text(encoding="utf-8-sig"))
+            tracks = catalog if isinstance(catalog, list) else catalog.get("tracks", []) if isinstance(catalog, dict) else []
+            for item in tracks:
+                if not isinstance(item, dict) or item.get("commercial_use") is not True:
+                    continue
+                license_type = str(item.get("license_type") or item.get("licenseType") or "").upper()
+                if license_type not in allowed:
+                    continue
+                filename = item.get("filename", "")
+                if not isinstance(filename, str) or not filename or Path(filename).name != filename:
+                    continue
+                track_path = MUSIC_DIR / filename
+                if not is_valid_audio_file(track_path):
+                    log("Catalog music missing or invalid: " + filename)
+                    continue
+                moods = item.get("moods", item.get("mood", []))
+                if isinstance(moods, str):
+                    moods = [moods]
+                moods = [str(x).strip().lower() for x in moods] if isinstance(moods, list) else []
+                valid.append((track_path, item, mood.lower() in moods))
+        except Exception as exc:
+            log("Music catalog could not be read: " + str(exc))
+
+    exact = [entry for entry in valid if entry[2]]
+    chosen = exact or valid
+    if chosen:
+        track_path, metadata, _ = chosen[0]
+        log(f"Background music selected from catalog: {track_path.name}")
+        return track_path, {
+            "filename": track_path.name,
+            "title": metadata.get("title", track_path.stem),
+            "licenseType": metadata.get("license_type") or metadata.get("licenseType"),
+            "attribution": metadata.get("attribution", ""),
+            "mood": mood,
+            "source": "catalog"
+        }
+
+    # Local fallback for the file supplied by the user.
+    fallback = MUSIC_DIR / "motivational.mp3"
+    if is_valid_audio_file(fallback):
+        log("Background music selected: motivational.mp3")
+        return fallback, {
+            "filename": fallback.name,
+            "title": "motivational",
+            "licenseType": "User-provided; verify usage rights",
+            "attribution": "Check the original music license and attribution requirements.",
+            "mood": mood,
+            "source": "local-fallback"
+        }
+
+    log("No valid background music found. Expected music/motivational.mp3 or an eligible catalog track.")
+    return None, None
+
+
+def render_clip(input_path, clip, index, transcript, profile, timeline, output_dir, has_audio):
+    stem = Path(input_path).stem
+    clip_name = f"{stem}-highlight-{index:02d}.mp4"
+    output_path = output_dir / clip_name
+    ass_path = output_dir / f"{stem}-highlight-{index:02d}.ass"
+
+    mood = classify_mood(transcript, clip, timeline)
+    effects = choose_effects(profile, clip["interestScore"], mood)
+    music_path, music_info = choose_music_track(mood)
+    caption_count = create_ass_captions(transcript, clip["start"], clip["end"], ass_path)
+
+    video_chain = (
+        "[0:v]split=2[bgsrc][fgsrc];"
+        "[bgsrc]scale=720:1280:force_original_aspect_ratio=increase,"
+        "crop=720:1280,boxblur=18:2,eq=brightness=-0.03:saturation=0.90[bg];"
+        "[fgsrc]scale=720:1280:force_original_aspect_ratio=decrease[fg];"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,"
+        "zoompan=z='min(1.035,1+0.025*(0.5-0.5*cos(2*PI*on/240)))':"
+        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=720x1280:fps=24[vbase]"
+    )
+    filters = [EFFECT_PRESETS[name] for name in effects]
+    if caption_count:
+        filters.append(f"ass=filename='{escape_filter_path(ass_path)}'")
+    filters.append("format=yuv420p")
+    video_chain += ";[vbase]" + ",".join(filters) + "[vout]"
+
+    duration = float(clip["duration"])
+    command = [
+        FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", str(clip["start"]), "-i", str(input_path)
+    ]
+    if music_path:
+        command += ["-stream_loop", "-1", "-i", str(music_path)]
+    command += ["-t", str(duration)]
+
+    if has_audio and music_path:
+        audio_chain = (
+            f"[0:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            "aresample=44100,volume=1.0[voice];"
+            f"[1:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            "aresample=44100,volume=0.12,"
+            "afade=t=in:st=0:d=1.0,"
+            f"afade=t=out:st={max(0.0, duration - 2.0)}:d=2.0[music];"
+            "[voice][music]amix=inputs=2:duration=first:dropout_transition=2,"
+            "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        )
+        command += ["-filter_complex", video_chain + ";" + audio_chain,
+                    "-map", "[vout]", "-map", "[aout]"]
+    elif has_audio:
+        command += [
+            "-filter_complex", video_chain, "-map", "[vout]", "-map", "0:a:0",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"
+        ]
+    elif music_path:
+        audio_chain = (
+            f"[1:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            "aresample=44100,volume=0.16,afade=t=in:st=0:d=1.0,"
+            f"afade=t=out:st={max(0.0, duration - 2.0)}:d=2.0,"
+            "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        )
+        command += ["-filter_complex", video_chain + ";" + audio_chain,
+                    "-map", "[vout]", "-map", "[aout]"]
+    else:
+        command += ["-filter_complex", video_chain, "-map", "[vout]", "-an"]
+
+    command += [
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+        "-r", "24", "-threads", "0", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+        "-movflags", "+faststart", str(output_path)
+    ]
+    try:
+        run_command(command)
+    finally:
+        ass_path.unlink(missing_ok=True)
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise RuntimeError(f"FFmpeg did not create output clip: {clip_name}")
+
+    return {
+        "filename": clip_name, "path": f"/outputs/{clip_name}",
+        "duration": clip["duration"], "start": clip["start"], "end": clip["end"],
+        "interestScore": clip["interestScore"], "features": clip.get("features", {}),
+        "mood": mood, "music": music_info, "captionCount": caption_count,
+        "autoEdited": True,
+        "framing": "9:16-blurred-background-with-fitted-foreground",
+        "selectedEffects": effects,
+        "animation": "subtle-animated-zoom-on-final-composition"
+    }
+
+
+def process_video(input_path):
+    global PROCESS_DEADLINE
+    started = time.monotonic()
+    input_path = Path(input_path).resolve()
+
+    if not Path(FFMPEG).is_file():
+        raise RuntimeError("FFmpeg not found: " + FFMPEG)
+    if not Path(FFPROBE).is_file():
+        raise RuntimeError("FFprobe not found: " + FFPROBE)
+    if not input_path.is_file():
+        raise RuntimeError("Input video not found: " + str(input_path))
+
+    _, _, has_audio = probe_streams(input_path)
+    duration = get_video_duration(input_path)
+    if duration < MIN_CLIP_DURATION:
+        raise RuntimeError(f"Source video must be at least {MIN_CLIP_DURATION:.0f} seconds.")
+
+    configured_timeout = os.environ.get("CLIPFORGE_PROCESS_TIMEOUT_SECONDS", "").strip()
+    if configured_timeout:
+        try:
+            budget = int(configured_timeout)
+            if budget < 60:
+                raise ValueError
+        except ValueError as exc:
+            raise RuntimeError("CLIPFORGE_PROCESS_TIMEOUT_SECONDS must be an integer >= 60.") from exc
+    else:
+        budget = max(600, min(3600, int(duration * 1.5)))
+    PROCESS_DEADLINE = started + budget
+
+    log(f"Processing {duration:.1f}s video | max clips={MAX_CLIPS} | audio={has_audio}")
+    energy = extract_audio_energy(input_path, duration, has_audio)
+    motion = analyze_visual_motion(input_path, duration)
+    scenes = detect_scenes(input_path, duration)
+    profile = analyze_profile(input_path)
+    timeline = build_timeline(duration, energy, motion, scenes)
+    clips = score_candidates(duration, timeline)
+
+    if not clips:
+        raise RuntimeError(
+            "No highlight candidates found. Try lowering CLIPFORGE_MIN_SCORE "
+            "in backend/.env (for example, CLIPFORGE_MIN_SCORE=10)."
+        )
+
+    transcript, language = transcribe_selected_clips(input_path, clips, has_audio)
+    for clip in clips:
+        text_for_clip = " ".join(
+            seg.get("text", "") for seg in transcript
+            if seg["end"] > clip["start"] and seg["start"] < clip["end"]
+        ).lower()
+        keyword_hits = sum(1 for word in INTEREST_WORDS if word in text_for_clip)
+        clip["features"]["keywordHits"] = keyword_hits
+        if keyword_hits:
+            clip["interestScore"] = round(min(99.0, clip["interestScore"] + min(8, keyword_hits * 1.5)), 1)
+
+    for row in timeline:
+        row["selectedClip"] = any(c["start"] <= row["time"] < c["end"] for c in clips)
+
+    log(f"Selected {len(clips)} highlight(s). Rendering...")
+    rendered = []
+    for index, clip in enumerate(clips, 1):
+        check_deadline()
+        log(f"Rendering {index}/{len(clips)}: {clip['start']:.1f}-{clip['end']:.1f}s score={clip['interestScore']}")
+        rendered.append(render_clip(
+            input_path, clip, index, transcript, profile, timeline, OUTPUT_DIR, has_audio
+        ))
+
+    check_deadline()
+    PROCESS_DEADLINE = None
+    return {
+        "success": True, "language": language, "duration": round(duration, 2),
+        "hasAudio": has_audio, "sceneChangesDetected": len(scenes),
+        "totalClips": len(rendered), "maxClips": MAX_CLIPS, "clips": rendered,
+        "timeline": timeline, "videoProfile": profile,
+        "analysis": {
+            "signals": ["audioEnergy", "visualMotion", "sceneChanges", "selectedClip"],
+            "minimumInterestScore": MIN_INTEREST_SCORE,
+            "note": "Heuristic audio/visual highlight ranking; not human-level semantic understanding."
+        },
+        "filename": rendered[0]["filename"], "clipStart": rendered[0]["start"],
+        "clipEnd": rendered[0]["end"],
+        "captionCount": sum(item["captionCount"] for item in rendered)
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ClipForge AI video highlight editor")
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=False)
+    args = parser.parse_args()
+    try:
+        result = process_video(args.input)
+        print(json.dumps(result, ensure_ascii=False))
+    except Exception as error:
+        log("AI PROCESSING FAILED: " + str(error))
+        print(json.dumps({"success": False, "error": str(error)}, ensure_ascii=False))
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
