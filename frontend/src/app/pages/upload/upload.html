@@ -144,10 +144,24 @@
         </p>
 
         <div class="timeline-chart">
-          <div class="timeline-bar" *ngFor="let item of timeline" [style.height.%]="item.interest * 100" [title]="
+          <div
+            class="timeline-bar"
+            *ngFor="let item of timeline"
+            [class.timeline-selected]="item.selectedClip"
+            [class.timeline-peak]="item.interestPeak"
+            [style.height.%]="item.interest * 100"
+            [title]="
               'Time: ' + item.time + 's | Interest: ' +
-              (item.interest * 100).toFixed(1) + '%'
+              (item.interest * 100).toFixed(1) + '%' +
+              (item.interestPeak ? ' | Graph peak' : '') +
+              (item.selectedClip ? ' | Selected highlight' : '')
             "></div>
+        </div>
+
+        <div class="timeline-legend">
+          <span><i class="legend-interest"></i> Interest score</span>
+          <span><i class="legend-selected"></i> Selected clip</span>
+          <span><i class="legend-peak"></i> Graph peak</span>
         </div>
 
         <div class="timeline-labels">

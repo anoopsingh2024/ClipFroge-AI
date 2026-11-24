@@ -365,6 +365,48 @@
   }
 }
 
+.timeline-bar.timeline-selected {
+  background: linear-gradient(to top, #047857, #6ee7b7);
+}
+
+.timeline-bar.timeline-peak {
+  outline: 1px solid #facc15;
+  outline-offset: -1px;
+}
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  color: #a1a1aa;
+  font-size: 11px;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+
+  .legend-interest {
+    background: linear-gradient(to top, #6d28d9, #c084fc);
+  }
+
+  .legend-selected {
+    background: linear-gradient(to top, #047857, #6ee7b7);
+  }
+
+  .legend-peak {
+    border: 1px solid #facc15;
+  }
+}
+
 .timeline-labels {
   display: flex;
   justify-content: space-between;

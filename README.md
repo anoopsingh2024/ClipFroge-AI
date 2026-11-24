@@ -26,6 +26,11 @@ purple/pink, and other combinations), blended with the blurred source layer.
 The selected palette is returned as `backgroundStyle` and `backgroundColors`
 in each clip's metadata.
 
+The timeline interest graph also contributes directly to clip ranking. Local
+graph peaks are detected by prominence, added as a scoring signal, and exposed
+as `interestPeak`/`peakProminence` on timeline points. The upload timeline
+highlights selected clip regions and graph peaks with a legend.
+
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with

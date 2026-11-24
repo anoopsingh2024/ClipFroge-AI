@@ -343,6 +343,47 @@ def build_timeline(duration, energy, motion, scene_markers):
             "sceneChange": round(scene_signal[sec], 4),
             "keywordCue": 0.0, "interest": round(score, 4)
         })
+
+    peak_candidates = []
+    for index, row in enumerate(timeline):
+        interest = row["interest"]
+        if interest < max(0.20, MIN_INTEREST_SCORE / 100):
+            continue
+        left = [item["interest"] for item in timeline[max(0, index - 2):index]]
+        right = [item["interest"] for item in timeline[index + 1:index + 3]]
+        neighbors = left + right
+        if not neighbors or not (
+            interest >= max(neighbors)
+            and interest > min(neighbors)
+        ):
+            continue
+        outer = (
+            timeline[max(0, index - 5):max(0, index - 2)]
+            + timeline[index + 3:index + 6]
+        )
+        baseline = sorted(item["interest"] for item in outer)
+        baseline = baseline[len(baseline) // 2] if baseline else 0.0
+        prominence = interest - baseline
+        if prominence >= 0.04:
+            peak_candidates.append({
+                "index": index,
+                "interest": interest,
+                "prominence": prominence
+            })
+
+    accepted_peaks = []
+    for candidate in sorted(
+        peak_candidates,
+        key=lambda item: (item["prominence"], item["interest"]),
+        reverse=True
+    ):
+        if any(abs(candidate["index"] - peak["index"]) < 3 for peak in accepted_peaks):
+            continue
+        accepted_peaks.append(candidate)
+
+    for peak in accepted_peaks:
+        timeline[peak["index"]]["interestPeak"] = True
+        timeline[peak["index"]]["peakProminence"] = round(peak["prominence"], 4)
     return timeline
 
 
@@ -372,7 +413,26 @@ def score_candidates(duration, timeline):
         peak_score = values[min(len(values) - 1, int(len(values) * 0.75))]
         active_ratio = sum(v >= 0.20 for v in values) / len(values)
         speech_score = sum(r["speech"] for r in rows) / len(rows)
-        score = 0.55 * mean_score + 0.20 * peak_score + 0.15 * active_ratio + 0.10 * speech_score
+        graph_peaks = [row for row in rows if row.get("interestPeak")]
+        graph_peak_score = (
+            sum(row["interest"] for row in graph_peaks) / len(graph_peaks)
+            if graph_peaks else 0.0
+        )
+        graph_peak_prominence = (
+            sum(row["peakProminence"] for row in graph_peaks) / len(graph_peaks)
+            if graph_peaks else 0.0
+        )
+        graph_peak_bonus = min(
+            1.0,
+            graph_peak_score + graph_peak_prominence * 0.5
+        )
+        score = (
+            0.50 * mean_score
+            + 0.20 * peak_score
+            + 0.12 * active_ratio
+            + 0.08 * speech_score
+            + 0.10 * graph_peak_bonus
+        )
         score_percent = score * 100
         if score_percent < MIN_INTEREST_SCORE:
             continue
@@ -381,7 +441,9 @@ def score_candidates(duration, timeline):
             "duration": round(end - start, 2), "interestScore": round(score_percent, 1),
             "features": {
                 "meanInterest": round(mean_score, 3), "peakInterest": round(peak_score, 3),
-                "activeRatio": round(active_ratio, 3), "speech": round(speech_score, 3)
+                "activeRatio": round(active_ratio, 3), "speech": round(speech_score, 3),
+                "timelineGraphPeaks": len(graph_peaks),
+                "timelineGraphPeakScore": round(graph_peak_bonus, 3)
             }
         })
 
@@ -932,7 +994,10 @@ def process_video(input_path):
         "totalClips": len(rendered), "maxClips": MAX_CLIPS, "clips": rendered,
         "timeline": timeline, "videoProfile": profile,
         "analysis": {
-            "signals": ["audioEnergy", "visualMotion", "sceneChanges", "selectedClip"],
+            "signals": [
+                "audioEnergy", "visualMotion", "sceneChanges",
+                "timelineGraphPeaks", "selectedClip"
+            ],
             "minimumInterestScore": MIN_INTEREST_SCORE,
             "backgroundBlur": {
                 "enabled": True,
