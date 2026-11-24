@@ -1,8 +1,8 @@
-
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
+import { finalize } from 'rxjs';
 
 interface GeneratedClip {
   filename: string;
@@ -10,18 +10,37 @@ interface GeneratedClip {
   start: number;
   end: number;
   score?: number;
+  interestScore?: number;
+  path?: string;
+  url?: string;
+  previewUrl?: string;
+  videoUrl?: string;
+  absoluteUrl?: string;
+  downloadUrl?: string;
+  absoluteDownloadUrl?: string;
+  mood?: string;
+  music?: unknown;
+  filter?: string;
+  effects?: string[];
+  captionCount?: number;
+  backgroundBlur?: unknown;
 }
 
 interface ProcessingResult {
   success: boolean;
   message: string;
   totalClips: number;
+  highlightCount?: number;
   duration: number;
   language: string;
   clips: GeneratedClip[];
+  highlights?: GeneratedClip[];
   jobId: string;
   downloadUrl: string;
+  downloadUrlAbsolute?: string;
   expiresInMinutes: number;
+  timeline?: unknown[];
+  analysis?: unknown;
 }
 
 @Component({
@@ -32,18 +51,15 @@ interface ProcessingResult {
   styleUrl: './home.scss'
 })
 export class Home {
-
   private readonly API_URL = 'http://localhost:5000/api/videos';
 
   isProcessing = false;
   isDownloading = false;
-
   result: ProcessingResult | null = null;
 
   constructor(private http: HttpClient) {}
 
   processVideoUrl(url: string): void {
-
     const videoUrl = url.trim();
 
     if (!videoUrl) {
@@ -70,17 +86,14 @@ export class Home {
     const isFacebook =
       hostname === 'facebook.com' ||
       hostname.endsWith('.facebook.com') ||
-      hostname === 'fb.watch' ||
-      hostname.endsWith('.fb.watch');
+      hostname === 'fb.watch';
 
     if (!isYouTube && !isFacebook) {
       alert('Only YouTube and Facebook URLs are supported.');
       return;
     }
 
-    if (this.isProcessing) {
-      return;
-    }
+    if (this.isProcessing) return;
 
     this.isProcessing = true;
     this.result = null;
@@ -88,55 +101,87 @@ export class Home {
     this.http.post<ProcessingResult>(
       `${this.API_URL}/process-url`,
       { url: videoUrl }
-    ).subscribe({
-
-      next: (response) => {
-
+    ).pipe(
+      finalize(() => {
         this.isProcessing = false;
+      })
+    ).subscribe({
+      next: (response) => {
+        const clips = response?.clips?.length
+          ? response.clips
+          : response?.highlights ?? [];
 
-        if (!response?.success || !response.jobId) {
-          alert(response?.message || 'Video processing failed.');
+        if (!response?.success || !response.jobId || clips.length === 0) {
+          alert(response?.message || 'No highlight clips were generated.');
           return;
         }
 
-        this.result = response;
-
-        console.log('ClipForge AI Result:', response);
-
+        this.result = {
+          ...response,
+          clips,
+          highlights: clips,
+          totalClips:
+            response.totalClips ??
+            response.highlightCount ??
+            clips.length
+        };
       },
 
       error: (error) => {
-
-        this.isProcessing = false;
-
         console.error('Video URL processing error:', error);
 
         alert(
-          error.error?.message ||
-          error.error?.error ||
-          'Unable to process this video. Please try another supported public URL.'
+          error?.error?.error ||
+          error?.error?.message ||
+          'Unable to process this video.'
         );
       }
     });
   }
 
-  downloadAllClips(): void {
+  resolveClipUrl(clip: GeneratedClip): string {
+    const url =
+      clip.absoluteUrl ||
+      clip.videoUrl ||
+      clip.previewUrl ||
+      clip.url ||
+      clip.path ||
+      '';
 
-    if (!this.result?.jobId || this.isDownloading) {
-      return;
+    if (!url) return '';
+
+    if (/^https?:\/\//i.test(url)) {
+      return url;
     }
+
+    return `http://localhost:5000/${url.replace(/^\/+/, '')}`;
+  }
+
+  resolveClipDownloadUrl(clip: GeneratedClip): string {
+    const url = clip.absoluteDownloadUrl || clip.downloadUrl || '';
+
+    if (!url) return '';
+
+    if (/^https?:\/\//i.test(url)) {
+      return url;
+    }
+
+    return `http://localhost:5000/${url.replace(/^\/+/, '')}`;
+  }
+
+  downloadAllClips(): void {
+    if (!this.result?.jobId || this.isDownloading) return;
 
     this.isDownloading = true;
 
     const downloadUrl =
+      this.result.downloadUrlAbsolute ||
       `${this.API_URL}/download/${encodeURIComponent(this.result.jobId)}`;
 
     this.http.get(downloadUrl, {
       responseType: 'blob'
     }).subscribe({
-
       next: (blob: Blob) => {
-
         this.isDownloading = false;
 
         if (!blob || blob.size === 0) {
@@ -154,25 +199,21 @@ export class Home {
         link.click();
         link.remove();
 
-        // Allow the browser time to start the download.
         setTimeout(() => {
           window.URL.revokeObjectURL(objectUrl);
         }, 60000);
 
         alert('Your clips ZIP download has started!');
-
-        // The backend handles temporary file cleanup.
         this.result = null;
       },
 
       error: (error) => {
-
         this.isDownloading = false;
 
         console.error('Download error:', error);
 
         alert(
-          error.error?.message ||
+          error?.error?.message ||
           'Download failed or expired. Please generate your clips again.'
         );
       }
