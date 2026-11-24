@@ -12,7 +12,20 @@
       <a href="#contact">Contact</a>
     </nav>
 
-    <button class="login-btn" type="button" routerLink="/auth">Login / Register</button>
+    <div class="auth-buttons" aria-label="Account access">
+      <a
+        class="login-btn"
+        routerLink="/auth"
+        [queryParams]="{ returnUrl: '/dashboard' }">
+        Login
+      </a>
+      <a
+        class="register-btn"
+        routerLink="/auth"
+        [queryParams]="{ mode: 'register', returnUrl: '/dashboard' }">
+        Register
+      </a>
+    </div>
   </header>
 
   <main>
