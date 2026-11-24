@@ -32,7 +32,6 @@ MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 MAX_CLIPS = 10
 MIN_CLIP_DURATION = 30.0
 MAX_CLIP_DURATION = 60.0
-CANDIDATE_STEP = 8.0
 MIN_INTEREST_SCORE = float(os.environ.get("CLIPFORGE_MIN_SCORE", "16"))
 WHISPER_MODEL_NAME = os.environ.get("CLIPFORGE_WHISPER_MODEL", "small")
 PROCESS_DEADLINE = None
@@ -349,52 +348,140 @@ def build_timeline(duration, energy, motion, scene_markers):
 def score_candidates(duration, timeline):
     if duration < MIN_CLIP_DURATION or not timeline:
         return []
-    windows = []
-    if duration <= MAX_CLIP_DURATION:
-        windows = [(0.0, duration)]
-    else:
-        lengths = [30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0]
-        start = 0.0
-        while start <= duration - MIN_CLIP_DURATION:
-            for length in lengths:
-                end = min(duration, start + length)
-                if MIN_CLIP_DURATION <= end - start <= MAX_CLIP_DURATION:
-                    windows.append((start, end))
-            start += CANDIDATE_STEP
-
     candidates = []
-    for start, end in windows:
-        rows = [timeline[i] for i in second_range(start, end, len(timeline))]
-        if not rows:
-            continue
-        values = sorted(row["interest"] for row in rows)
-        mean_score = sum(values) / len(values)
-        peak_score = values[min(len(values) - 1, int(len(values) * 0.75))]
-        active_ratio = sum(v >= 0.20 for v in values) / len(values)
-        speech_score = sum(r["speech"] for r in rows) / len(rows)
-        score = 0.55 * mean_score + 0.20 * peak_score + 0.15 * active_ratio + 0.10 * speech_score
-        score_percent = score * 100
-        if score_percent < MIN_INTEREST_SCORE:
-            continue
-        candidates.append({
-            "start": round(start, 2), "end": round(end, 2),
-            "duration": round(end - start, 2), "interestScore": round(score_percent, 1),
-            "features": {
-                "meanInterest": round(mean_score, 3), "peakInterest": round(peak_score, 3),
-                "activeRatio": round(active_ratio, 3), "speech": round(speech_score, 3)
-            }
-        })
+    for length in (6.0, 8.0, 10.0, 12.0, 15.0):
+        start = 0.0
+        while start + length <= duration:
+            end = start + length
+            rows = [timeline[i] for i in second_range(start, end, len(timeline))]
+            if rows:
+                values = sorted(row["interest"] for row in rows)
+                mean_score = sum(values) / len(values)
+                peak_score = values[min(len(values) - 1, int(len(values) * 0.75))]
+                active_ratio = sum(value >= 0.20 for value in values) / len(values)
+                speech_score = sum(row["speech"] for row in rows) / len(rows)
+                score = (
+                    0.55 * mean_score
+                    + 0.20 * peak_score
+                    + 0.15 * active_ratio
+                    + 0.10 * speech_score
+                )
+                candidates.append({
+                    "start": round(start, 2),
+                    "end": round(end, 2),
+                    "duration": length,
+                    "interestScore": round(score * 100, 1),
+                    "features": {
+                        "meanInterest": round(mean_score, 3),
+                        "peakInterest": round(peak_score, 3),
+                        "activeRatio": round(active_ratio, 3),
+                        "speech": round(speech_score, 3)
+                    }
+                })
+            start += 2.0
 
-    candidates.sort(key=lambda x: x["interestScore"], reverse=True)
-    selected = []
-    for item in candidates:
-        if any(item["start"] < old["end"] + 1.5 and item["end"] > old["start"] - 1.5 for old in selected):
-            continue
-        selected.append(item)
-        if len(selected) >= MAX_CLIPS:
+    if not candidates:
+        return []
+
+    candidates.sort(
+        key=lambda item: (item["interestScore"], item["duration"]),
+        reverse=True
+    )
+    percentile_index = min(len(candidates) - 1, int(len(candidates) * 0.60))
+    threshold = max(MIN_INTEREST_SCORE, candidates[percentile_index]["interestScore"])
+    ranked = [item for item in candidates if item["interestScore"] >= threshold]
+    fallback_ranked = [item for item in candidates if item["interestScore"] < threshold]
+
+    # Keep short, high-interest source moments independent; assemble them into
+    # watchable 30-60 second montages instead of returning source-time windows.
+    selected_segments = []
+
+    def add_non_overlapping(items, required_duration=None):
+        source_duration = sum(item["duration"] for item in selected_segments)
+        for item in items:
+            if any(
+                item["start"] < old["end"] + 0.25
+                and item["end"] > old["start"] - 0.25
+                for old in selected_segments
+            ):
+                continue
+            selected_segments.append(item)
+            source_duration += item["duration"]
+            if len(selected_segments) >= MAX_CLIPS * 12:
+                break
+            if required_duration is not None and source_duration >= required_duration:
+                break
+
+    add_non_overlapping(ranked)
+    minimum_source_duration = MIN_CLIP_DURATION + 3.0
+    if sum(item["duration"] for item in selected_segments) < minimum_source_duration:
+        add_non_overlapping(
+            fallback_ranked,
+            required_duration=minimum_source_duration
+        )
+
+    selected_segments.sort(key=lambda item: item["interestScore"], reverse=True)
+    used = set()
+    montages = []
+    transition = 0.28
+    for _ in range(MAX_CLIPS):
+        available = [
+            (index, item) for index, item in enumerate(selected_segments)
+            if index not in used
+        ]
+        if not available:
             break
-    selected.sort(key=lambda x: x["start"])
-    return selected
+
+        chosen = []
+        output_duration = 0.0
+        for index, item in available:
+            next_duration = output_duration + item["duration"]
+            if chosen:
+                next_duration -= transition
+            if next_duration > MAX_CLIP_DURATION:
+                continue
+            chosen.append((index, item))
+            output_duration = next_duration
+            if output_duration >= 40.0:
+                break
+
+        if output_duration < MIN_CLIP_DURATION:
+            break
+
+        for index, _ in chosen:
+            used.add(index)
+        parts = sorted((item for _, item in chosen), key=lambda item: item["start"])
+        weighted_score = sum(
+            item["interestScore"] * item["duration"] for item in parts
+        ) / sum(item["duration"] for item in parts)
+        montages.append({
+            "start": parts[0]["start"],
+            "end": parts[-1]["end"],
+            "duration": round(output_duration, 2),
+            "interestScore": round(weighted_score, 1),
+            "features": {
+                "segments": len(parts),
+                "meanInterest": round(
+                    sum(item["features"]["meanInterest"] for item in parts) / len(parts), 3
+                )
+            },
+            "segments": [
+                {"start": item["start"], "end": item["end"]}
+                for item in parts
+            ]
+        })
+    if not montages and duration <= MAX_CLIP_DURATION:
+        values = [row["interest"] for row in timeline]
+        average_score = sum(values) / len(values)
+        montages.append({
+            "start": 0.0,
+            "end": round(duration, 2),
+            "duration": round(duration, 2),
+            "interestScore": round(average_score * 100, 1),
+            "features": {"fallback": "source-too-short-to-build-montage"},
+            "segments": [{"start": 0.0, "end": round(duration, 2)}]
+        })
+    return montages
 
 
 def transcribe_selected_clips(video_path, clips, has_audio):
@@ -405,41 +492,49 @@ def transcribe_selected_clips(video_path, clips, has_audio):
     transcript, language = [], "unknown"
     for index, clip in enumerate(clips, 1):
         check_deadline()
-        wav_path = TEMP_DIR / f"{Path(video_path).stem}-clip-{index:02d}.wav"
-        try:
-            run_command([
-                FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                "-ss", str(clip["start"]), "-i", str(video_path),
-                "-t", str(clip["duration"]), "-vn", "-ac", "1", "-ar", "16000",
-                "-c:a", "pcm_s16le", str(wav_path)
-            ])
-            segments, info = model.transcribe(
-                str(wav_path),
-                language=None,
-                task="transcribe",
-                word_timestamps=True,
-                vad_filter=True,
-                beam_size=5,
-                temperature=0.0,
-                condition_on_previous_text=True,
-                compression_ratio_threshold=2.4,
-                log_prob_threshold=-1.0,
-                no_speech_threshold=0.6,
+        source_parts = clip.get("segments") or [
+            {"start": clip["start"], "end": clip["end"]}
+        ]
+        for part_index, part in enumerate(source_parts, 1):
+            part_start = float(part["start"])
+            part_duration = float(part["end"]) - part_start
+            wav_path = TEMP_DIR / (
+                f"{Path(video_path).stem}-clip-{index:02d}-part-{part_index:02d}.wav"
             )
-            language = getattr(info, "language", None) or language
-            for segment in segments:
-                words = [{
-                    "text": word.word.strip(),
-                    "start": float(word.start) + clip["start"],
-                    "end": float(word.end) + clip["start"]
-                } for word in (segment.words or [])]
-                transcript.append({
-                    "start": float(segment.start) + clip["start"],
-                    "end": float(segment.end) + clip["start"],
-                    "text": segment.text.strip(), "words": words
-                })
-        finally:
-            wav_path.unlink(missing_ok=True)
+            try:
+                run_command([
+                    FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                    "-ss", str(part_start), "-i", str(video_path),
+                    "-t", str(part_duration), "-vn", "-ac", "1", "-ar", "16000",
+                    "-c:a", "pcm_s16le", str(wav_path)
+                ])
+                segments, info = model.transcribe(
+                    str(wav_path),
+                    language=None,
+                    task="transcribe",
+                    word_timestamps=True,
+                    vad_filter=True,
+                    beam_size=5,
+                    temperature=0.0,
+                    condition_on_previous_text=True,
+                    compression_ratio_threshold=2.4,
+                    log_prob_threshold=-1.0,
+                    no_speech_threshold=0.6,
+                )
+                language = getattr(info, "language", None) or language
+                for segment in segments:
+                    words = [{
+                        "text": word.word.strip(),
+                        "start": float(word.start) + part_start,
+                        "end": float(word.end) + part_start
+                    } for word in (segment.words or [])]
+                    transcript.append({
+                        "start": float(segment.start) + part_start,
+                        "end": float(segment.end) + part_start,
+                        "text": segment.text.strip(), "words": words
+                    })
+            finally:
+                wav_path.unlink(missing_ok=True)
     return transcript, language
 
 
@@ -452,7 +547,7 @@ def escape_ass(value):
     return value.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", " ")
 
 
-def create_ass_captions(transcript, clip_start, clip_end, ass_path):
+def create_ass_captions(transcript, clip_start, clip_end, ass_path, source_segments=None):
     header = r"""[Script Info]
 Title: ClipForge AI Captions
 ScriptType: v4.00+
@@ -468,23 +563,43 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header]
     count = 0
-    for segment in transcript:
-        words = [w for w in segment.get("words", []) if w["end"] > clip_start and w["start"] < clip_end]
+    source_parts = source_segments or [{"start": clip_start, "end": clip_end}]
+    output_cursor = 0.0
+    for part_index, part in enumerate(source_parts):
+        part_start = float(part["start"])
+        part_end = float(part["end"])
+        words = []
+        for segment in transcript:
+            for word in segment.get("words", []):
+                if word["end"] <= part_start or word["start"] >= part_end:
+                    continue
+                source_start = max(float(word["start"]), part_start)
+                source_end = min(float(word["end"]), part_end)
+                words.append({
+                    "text": word["text"],
+                    "start": output_cursor + source_start - part_start,
+                    "end": output_cursor + source_end - part_start,
+                    "sourceStart": source_start
+                })
+        words.sort(key=lambda word: word["sourceStart"])
         for offset in range(0, len(words), 4):
             group = words[offset:offset + 4]
             if not group:
                 continue
-            start = max(group[0]["start"], clip_start) - clip_start
-            end = min(group[-1]["end"], clip_end) - clip_start
+            start = group[0]["start"]
+            end = group[-1]["end"]
             if end <= start:
                 continue
-            parts = []
+            caption_parts = []
             for word in group:
                 centiseconds = max(1, int((word["end"] - word["start"]) * 100))
-                parts.append(rf"{{\kf{centiseconds}}}{escape_ass(word['text'])}")
-            caption = r"{\an2\bord5\shad3\fscx88\fscy88\t(0,120,\fscx108\fscy108)\t(120,220,\fscx100\fscy100)}" + " ".join(parts)
+                caption_parts.append(rf"{{\kf{centiseconds}}}{escape_ass(word['text'])}")
+            caption = r"{\an2\bord5\shad3\fscx88\fscy88\t(0,120,\fscx108\fscy108)\t(120,220,\fscx100\fscy100)}" + " ".join(caption_parts)
             lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Default,,0,0,0,,{caption}")
             count += 1
+        output_cursor += part_end - part_start
+        if part_index < len(source_parts) - 1:
+            output_cursor -= 0.28
     ass_path.write_text("\n".join(lines), encoding="utf-8-sig")
     return count
 
@@ -736,7 +851,7 @@ def choose_music_track(mood):
     return None, None
 
 
-def render_clip(input_path, clip, index, transcript, profile, timeline, output_dir, has_audio):
+def _render_clip_part(input_path, clip, index, transcript, profile, timeline, output_dir, has_audio):
     stem = Path(input_path).stem
     clip_name = f"{stem}-highlight-{index:02d}.mp4"
     output_path = output_dir / clip_name
@@ -857,6 +972,144 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
     }
 
 
+def render_clip(input_path, clip, index, transcript, profile, timeline, output_dir, has_audio):
+    source_parts = clip.get("segments") or [
+        {"start": clip["start"], "end": clip["end"]}
+    ]
+    stem = Path(input_path).stem
+    clip_name = f"{stem}-highlight-{index:02d}.mp4"
+    output_path = output_dir / clip_name
+    temp_dir = output_dir / f".{stem}-highlight-{index:02d}-parts"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    rendered_parts = []
+    part_metadata = []
+    transition_duration = 0.28
+    render_completed = False
+
+    try:
+        for part_index, part in enumerate(source_parts, 1):
+            part_clip = {
+                "start": float(part["start"]),
+                "end": float(part["end"]),
+                "duration": round(float(part["end"]) - float(part["start"]), 2),
+                "interestScore": clip["interestScore"],
+                "features": clip.get("features", {})
+            }
+            metadata = _render_clip_part(
+                input_path,
+                part_clip,
+                index * 100 + part_index,
+                transcript,
+                profile,
+                timeline,
+                temp_dir,
+                has_audio
+            )
+            rendered_parts.append(temp_dir / metadata["filename"])
+            part_metadata.append(metadata)
+
+        input_args = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y"]
+        video_filters = []
+        audio_filters = []
+        durations = []
+        audio_presence = []
+        for part_index, part_path in enumerate(rendered_parts):
+            input_args.extend(["-i", str(part_path)])
+            durations.append(get_video_duration(part_path))
+            audio_presence.append(probe_streams(part_path)[2])
+            video_filters.append(
+                f"[{part_index}:v:0]fps=24,format=yuv420p,settb=AVTB,"
+                f"setpts=PTS-STARTPTS[v{part_index}]"
+            )
+            if audio_presence[-1]:
+                audio_filters.append(
+                    f"[{part_index}:a:0]aresample=44100,"
+                    f"aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                    f"asetpts=PTS-STARTPTS[a{part_index}]"
+                )
+
+        joined_video = "v0"
+        montage_duration = durations[0]
+        for part_index in range(1, len(rendered_parts)):
+            offset = montage_duration - transition_duration
+            joined_label = f"vjoin{part_index}"
+            video_filters.append(
+                f"[{joined_video}][v{part_index}]"
+                f"xfade=transition=fade:duration={transition_duration}:"
+                f"offset={offset:.3f}[{joined_label}]"
+            )
+            montage_duration += durations[part_index] - transition_duration
+            joined_video = joined_label
+        video_filters.append(f"[{joined_video}]format=yuv420p[vout]")
+
+        if any(audio_presence) and not all(audio_presence):
+            raise RuntimeError("Rendered montage parts have inconsistent audio streams.")
+        if audio_presence and all(audio_presence):
+            joined_audio = "a0"
+            for part_index in range(1, len(rendered_parts)):
+                joined_label = f"ajoin{part_index}"
+                audio_filters.append(
+                    f"[{joined_audio}][a{part_index}]"
+                    f"acrossfade=d={transition_duration}:c1=tri:c2=tri"
+                    f"[{joined_label}]"
+                )
+                joined_audio = joined_label
+            audio_filters.append(f"[{joined_audio}]anull[aout]")
+
+        input_args.extend([
+            "-t", f"{montage_duration:.3f}",
+            "-filter_complex", ";".join(video_filters + audio_filters),
+            "-map", "[vout]"
+        ])
+        if audio_presence and all(audio_presence):
+            input_args.extend(["-map", "[aout]"])
+        else:
+            input_args.append("-an")
+        input_args.extend([
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+            "-r", "24", "-threads", "0", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
+            "-movflags", "+faststart", str(output_path)
+        ])
+        run_command(input_args)
+        render_completed = True
+    finally:
+        for part_path in rendered_parts:
+            part_path.unlink(missing_ok=True)
+        for temp_file in temp_dir.iterdir():
+            temp_file.unlink(missing_ok=True)
+        temp_dir.rmdir()
+        if not render_completed:
+            output_path.unlink(missing_ok=True)
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise RuntimeError(f"FFmpeg did not create montage clip: {clip_name}")
+
+    first = part_metadata[0]
+    return {
+        **first,
+        "filename": clip_name,
+        "path": f"/outputs/{clip_name}",
+        "duration": round(montage_duration, 2),
+        "start": clip["start"],
+        "end": clip["end"],
+        "interestScore": clip["interestScore"],
+        "features": clip.get("features", {}),
+        "segments": source_parts,
+        "montage": len(source_parts) > 1,
+        "transitions": max(0, len(source_parts) - 1),
+        "backgroundStyles": [item["backgroundStyle"] for item in part_metadata],
+        "filter": ", ".join(dict.fromkeys(item["filter"] for item in part_metadata)),
+        "selectedEffects": list(dict.fromkeys(
+            effect for item in part_metadata for effect in item["selectedEffects"]
+        )),
+        "effects": list(dict.fromkeys(
+            effect for item in part_metadata for effect in item["effects"]
+        )),
+        "animation": "animated-crossfade-cuts-with-mood-aware-zoom"
+    }
+
+
 def process_video(input_path):
     global PROCESS_DEADLINE
     started = time.monotonic()
@@ -902,9 +1155,15 @@ def process_video(input_path):
 
     transcript, language = transcribe_selected_clips(input_path, clips, has_audio)
     for clip in clips:
+        source_parts = clip.get("segments") or [
+            {"start": clip["start"], "end": clip["end"]}
+        ]
         text_for_clip = " ".join(
             seg.get("text", "") for seg in transcript
-            if seg["end"] > clip["start"] and seg["start"] < clip["end"]
+            if any(
+                seg["end"] > part["start"] and seg["start"] < part["end"]
+                for part in source_parts
+            )
         ).lower()
         keyword_hits = sum(1 for word in INTEREST_WORDS if word in text_for_clip)
         clip["features"]["keywordHits"] = keyword_hits
@@ -912,7 +1171,11 @@ def process_video(input_path):
             clip["interestScore"] = round(min(99.0, clip["interestScore"] + min(8, keyword_hits * 1.5)), 1)
 
     for row in timeline:
-        row["selectedClip"] = any(c["start"] <= row["time"] < c["end"] for c in clips)
+        row["selectedClip"] = any(
+            part["start"] <= row["time"] < part["end"]
+            for clip in clips
+            for part in clip.get("segments", [{"start": clip["start"], "end": clip["end"]}])
+        )
 
     log(f"Selected {len(clips)} highlight(s). Rendering...")
     random.shuffle(BACKGROUND_PALETTES)

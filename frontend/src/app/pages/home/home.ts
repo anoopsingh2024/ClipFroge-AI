@@ -23,6 +23,10 @@ interface GeneratedClip {
   filter?: string;
   backgroundStyle?: string;
   backgroundColors?: string[];
+  backgroundStyles?: string[];
+  montage?: boolean;
+  segments?: Array<{ start: number; end: number }>;
+  transitions?: number;
   effects?: string[];
   captionCount?: number;
   backgroundBlur?: unknown;

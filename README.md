@@ -26,6 +26,13 @@ purple/pink, and other combinations), blended with the blurred source layer.
 The selected palette is returned as `backgroundStyle` and `backgroundColors`
 in each clip's metadata.
 
+Highlight selection scores overlapping 6–15 second source moments using audio
+energy, visual motion, scene changes, and speech, then assembles the strongest
+non-overlapping moments into 30–60 second montages. Low-scoring gaps are
+skipped; neighboring moments receive animated crossfade transitions. The
+selected source ranges and transition count are included in each clip's
+`segments` and `transitions` metadata.
+
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with
