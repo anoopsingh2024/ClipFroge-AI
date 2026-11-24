@@ -82,7 +82,7 @@ const FILTERS: Record<string, string> = {
   gaming_punchy: 'eq=contrast=1.13:saturation=1.15:brightness=.004:gamma=.98',
   retro_creator: 'eq=contrast=.98:saturation=.82:brightness=.018:gamma=1.03,colorbalance=rs=.045:gs=.01:bs=-.03',
   dreamy_glow: 'eq=brightness=.012:contrast=.98:saturation=1.01,unsharp=5:5:.22:3:3:.08',
-  neon: 'eq=contrast=1.12:saturation=1.22:gamma=.98',
+  neon_glow: 'eq=contrast=1.12:saturation=1.22:gamma=.98',
   black_white_clean: 'hue=s=0,eq=contrast=1.08:gamma=.98',
   sepia_film: 'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131,eq=contrast=1.03:brightness=.012',
   soft_glow_creator: 'eq=brightness=.018:contrast=.98:saturation=1.01,unsharp=5:5:.18:3:3:.05',

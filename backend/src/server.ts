@@ -2,6 +2,9 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 import videoRoutes from './routes/video.routes';
 import editorRoutes from './routes/editor.routes';

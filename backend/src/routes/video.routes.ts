@@ -4,21 +4,20 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import archiver from 'archiver';
+const archiver: any = require('archiver');
 const ytdlp: any = require('yt-dlp-exec');
 const router = Router();
-const BASE_DIR = process.cwd();
+const BASE_DIR = path.resolve(__dirname, '../..');
 const uploadDirectory = path.join(BASE_DIR, 'uploads');
 const outputDirectory = path.join(BASE_DIR, 'outputs');
 const aiEngineDirectory = path.join(BASE_DIR, 'ai_engine');
 const FFMPEG_PATH =
   process.env.CLIPFORGE_FFMPEG || 'C:\\ffmpeg\\bin\\ffmpeg.exe';
-const PYTHON_PATH = path.join(
-  BASE_DIR,
-  'ai-venv',
-  'Scripts',
-  'python.exe'
-);
+const FFPROBE_PATH =
+  process.env.CLIPFORGE_FFPROBE || 'C:\\ffmpeg\\bin\\ffprobe.exe';
+const PYTHON_PATH =
+  process.env.CLIPFORGE_PYTHON ||
+  path.join(BASE_DIR, 'ai-venv', 'Scripts', 'python.exe');
 const PYTHON_SCRIPT = path.join(
   aiEngineDirectory,
   'process_video.py'
@@ -74,12 +73,93 @@ function isSafeLocalFilename(filename: string): boolean {
     path.basename(filename) === filename
   );
 }
+function getRouteParam(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
 async function removeFile(filePath: string): Promise<void> {
   try {
     await fs.promises.unlink(filePath);
   } catch {
     // Ignore missing files and cleanup errors.*
   }
+}
+
+function runExternal(command: string, args: string[], timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { windowsHide: true });
+    let errorText = '';
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      reject(new Error(`${path.basename(command)} operation timed out.`));
+    }, timeoutMs);
+    child.stderr.on('data', data => {
+      errorText += data.toString();
+    });
+    child.on('error', error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on('close', code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else reject(new Error(errorText.slice(-4000) || `${path.basename(command)} failed.`));
+    });
+  });
+}
+
+async function normalizeDownloadedVideo(
+  downloadedPath: string
+): Promise<string> {
+  await runExternal(
+    FFPROBE_PATH,
+    [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_type',
+      '-of', 'csv=p=0',
+      downloadedPath
+    ],
+    30_000
+  );
+
+  const mp4Path = downloadedPath.replace(/\.[^.]+$/, '.mp4');
+  if (path.extname(downloadedPath).toLowerCase() === '.mp4' &&
+      fs.existsSync(mp4Path)) {
+    return downloadedPath;
+  }
+
+  await runExternal(
+    FFMPEG_PATH,
+    [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-i', downloadedPath,
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '21',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', '+faststart',
+      mp4Path
+    ],
+    20 * 60 * 1000
+  );
+
+  const stat = await fs.promises.stat(mp4Path);
+  if (!stat.isFile() || stat.size === 0) {
+    throw new Error(`FFmpeg could not normalize downloaded video: ${downloadedPath}`);
+  }
+  await removeFile(downloadedPath);
+  return mp4Path;
 }
 async function removeGeneratedFiles(
   filenames: string[]
@@ -120,6 +200,9 @@ function checkProcessingDependencies(): string | null {
   }
   if (!fs.existsSync(FFMPEG_PATH)) {
     return `FFmpeg executable not found: ${FFMPEG_PATH}`;
+  }
+  if (!fs.existsSync(FFPROBE_PATH)) {
+    return `FFprobe executable not found: ${FFPROBE_PATH}`;
   }
   return null;
 }
@@ -200,7 +283,7 @@ function getYouTubeCookieOptions(): Record<string, string> {
 
   // Chrome DPAPI can fail on some Windows setups. Firefox is the default.
   // Set CLIPFORGE_YTDLP_BROWSER=none to disable browser cookies.
-  const browser = (process.env.CLIPFORGE_YTDLP_BROWSER || 'firefox')
+  const browser = (process.env.CLIPFORGE_YTDLP_BROWSER || 'none')
     .trim()
     .toLowerCase();
 
@@ -239,18 +322,28 @@ async function downloadPublicVideo(
       '[URL IMPORT] YouTube cookie mode:',
       process.env.CLIPFORGE_YTDLP_COOKIES
         ? 'cookies file'
-        : (process.env.CLIPFORGE_YTDLP_BROWSER || 'firefox')
+        : (process.env.CLIPFORGE_YTDLP_BROWSER || 'none')
     );
   }
 
   // Some YouTube videos do not expose the same format set to every player
   // client/account. Try progressively broader format selectors.
   const formatCandidates = [
+    'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[ext=mp4]',
     'bv*+ba/b',
     'bestvideo*+bestaudio/best',
-    'best[ext=mp4]/best',
     'best'
   ];
+
+  if (process.env.CLIPFORGE_YTDLP_AUTO_UPDATE !== 'false') {
+    try {
+      await ytdlp('--update', {}, { timeout: 60_000, windowsHide: true });
+      console.log('[URL IMPORT] yt-dlp update check completed.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[URL IMPORT] yt-dlp update check skipped:', message);
+    }
+  }
 
   let lastError: unknown;
 
@@ -278,6 +371,11 @@ async function downloadPublicVideo(
       format,
       mergeOutputFormat: 'mp4',
       remuxVideo: 'mp4',
+      noCheckCertificates: true,
+      geoBypass: true,
+      extractorRetries: 3,
+      forceIpv4: true,
+      extractorArgs: 'youtube:player_client=android,web',
       maxFilesize: '1G',
       socketTimeout: 60,
       retries: 5,
@@ -336,8 +434,9 @@ async function downloadPublicVideo(
       if (!finalStat.isFile() || finalStat.size <= 0) {
         throw new Error(`Downloaded video is missing or empty: ${downloaded.fullPath}`);
       }
-      console.log('[URL IMPORT] Download completed:', downloaded.fullPath);
-      return downloaded.fullPath;
+      const normalizedPath = await normalizeDownloadedVideo(downloaded.fullPath);
+      console.log('[URL IMPORT] Download completed:', normalizedPath);
+      return normalizedPath;
     } catch (error) {
       lastError = error;
       await removeFile(destinationPath);
@@ -389,7 +488,8 @@ function runPython(inputPath: string): Promise<any> {
         windowsHide: true,
         env: {
           ...process.env,
-          CLIPFORGE_FFMPEG: FFMPEG_PATH
+          CLIPFORGE_FFMPEG: FFMPEG_PATH,
+          CLIPFORGE_FFPROBE: FFPROBE_PATH
         }
       }
     );
@@ -549,7 +649,11 @@ async function processInputVideo(
       error instanceof Error ? error.message : String(error);
     console.error('[CLIPFORGE] Processing failed:', message);
     if (!res.headersSent) {
-      res.status(500).json({
+      const status =
+        /timed out|time limit|deadline/i.test(message) ? 504 :
+        /no highlight|duration|input video|unsupported|invalid/i.test(message) ? 422 :
+        500;
+      res.status(status).json({
         success: false,
         message: 'Video processing failed.',
         error: message
@@ -586,7 +690,7 @@ router.post(
 router.post(
   '/process/:filename',
   async (req: Request, res: Response) => {
-    const filename = req.params.filename;
+    const filename = getRouteParam(req.params.filename);
     if (!isSafeLocalFilename(filename)) {
       return res.status(400).json({
         success: false,
@@ -704,7 +808,8 @@ router.post(
 router.get(
   '/clip/:jobId/:filename',
   (req: Request, res: Response) => {
-    const { jobId, filename } = req.params;
+    const jobId = getRouteParam(req.params.jobId);
+    const filename = getRouteParam(req.params.filename);
     const job = downloadJobs.get(jobId);
     if (!job || !isSafeLocalFilename(filename)) {
       return res.status(404).json({
@@ -735,7 +840,8 @@ router.get(
 router.get(
   '/clip-download/:jobId/:filename',
   (req: Request, res: Response) => {
-    const { jobId, filename } = req.params;
+    const jobId = getRouteParam(req.params.jobId);
+    const filename = getRouteParam(req.params.filename);
     const job = downloadJobs.get(jobId);
     if (!job || !isSafeLocalFilename(filename)) {
       return res.status(404).json({
@@ -764,7 +870,7 @@ router.get(
 router.get(
   '/download/:jobId',
   async (req: Request, res: Response) => {
-    const jobId = req.params.jobId;
+    const jobId = getRouteParam(req.params.jobId);
     const job = downloadJobs.get(jobId);
     if (!job) {
       return res.status(404).json({
