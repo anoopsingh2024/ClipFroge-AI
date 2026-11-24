@@ -20,6 +20,12 @@ Each rendered clip now reports its selected `filter`, `effects`, and
 `backgroundBlur` metadata while preserving the existing `selectedEffects`
 field for API compatibility.
 
+Automatic highlights are 30–60 seconds long. Each clip also gets a distinct
+color-gradient background palette (including black/orange, green, blue/cyan,
+purple/pink, and other combinations), blended with the blurred source layer.
+The selected palette is returned as `backgroundStyle` and `backgroundColors`
+in each clip's metadata.
+
 Available automatic grades include cinematic teal/orange, Hollywood warm,
 dark cinematic, moody blue, film look, vintage cinema, dramatic contrast,
 vibrant, natural, clean creator, travel, professional portrait, gaming

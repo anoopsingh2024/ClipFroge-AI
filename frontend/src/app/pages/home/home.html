@@ -60,7 +60,7 @@
           <div class="supported-platforms">
             <span class="platform-chip youtube-chip">▶ YouTube</span>
             <span class="platform-chip facebook-chip">f Facebook</span>
-            <span class="duration-chip">20–60 sec clips</span>
+            <span class="duration-chip">30–60 sec clips</span>
           </div>
 
           <div class="url-input-row">
@@ -118,7 +118,7 @@
             </div>
 
             <div class="result-stat">
-              <strong>20–60 sec</strong>
+              <strong>30–60 sec</strong>
               <span>Clip Duration</span>
             </div>
 
@@ -154,6 +154,7 @@
                   Score {{ clip.interestScore ?? clip.score ?? 0 }}
                   <span *ngIf="clip.mood"> · {{ clip.mood }}</span>
                   <span *ngIf="clip.filter"> · {{ clip.filter }}</span>
+                  <span *ngIf="clip.backgroundStyle"> · {{ clip.backgroundStyle }} background</span>
                 </p>
               </div>
 
@@ -251,7 +252,7 @@
 
         <div class="feature-card">
           <div class="feature-icon">⏱️</div>
-          <h3>20–60 Second Clips</h3>
+          <h3>30–60 Second Clips</h3>
           <p>Generate short clips with a duration between 20 and 60 seconds.</p>
         </div>
       </div>

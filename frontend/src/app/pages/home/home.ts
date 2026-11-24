@@ -21,6 +21,8 @@ interface GeneratedClip {
   mood?: string;
   music?: unknown;
   filter?: string;
+  backgroundStyle?: string;
+  backgroundColors?: string[];
   effects?: string[];
   captionCount?: number;
   backgroundBlur?: unknown;

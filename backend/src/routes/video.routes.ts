@@ -674,6 +674,8 @@ async function processInputVideo(
         mood: clip.mood ?? null,
         music: clip.music ?? null,
         filter: clip.filter ?? null,
+        backgroundStyle: clip.backgroundStyle ?? null,
+        backgroundColors: clip.backgroundColors ?? [],
         selectedEffects: clip.selectedEffects ?? [],
         effects: clip.effects ?? clip.selectedEffects ?? [],
         backgroundBlur: clip.backgroundBlur ?? null,

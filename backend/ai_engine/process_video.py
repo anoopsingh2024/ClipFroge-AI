@@ -2,6 +2,7 @@ import argparse
 import json
 import math
 import os
+import random
 import subprocess
 import sys
 import wave
@@ -10,6 +11,7 @@ import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 from faster_whisper import WhisperModel
 
 # ============================================================
@@ -28,7 +30,7 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_CLIPS = 10
-MIN_CLIP_DURATION = 20.0
+MIN_CLIP_DURATION = 30.0
 MAX_CLIP_DURATION = 60.0
 CANDIDATE_STEP = 8.0
 MIN_INTEREST_SCORE = float(os.environ.get("CLIPFORGE_MIN_SCORE", "16"))
@@ -42,6 +44,18 @@ BACKGROUND_BLUR_RADIUS = max(
 BACKGROUND_BLUR_PASSES = max(
     1, int(os.environ.get("CLIPFORGE_BACKGROUND_BLUR_PASSES", "2"))
 )
+BACKGROUND_PALETTES = [
+    ("black-orange", (20, 10, 4), (0, 115, 255)),
+    ("emerald-green", (8, 42, 18), (70, 190, 95)),
+    ("navy-cyan", (48, 18, 8), (230, 160, 35)),
+    ("purple-pink", (65, 20, 55), (210, 105, 235)),
+    ("charcoal-lime", (24, 27, 16), (90, 210, 175)),
+    ("deep-blue-gold", (55, 24, 12), (40, 165, 245)),
+    ("teal-coral", (40, 65, 12), (105, 115, 245)),
+    ("burgundy-amber", (35, 12, 42), (35, 145, 255)),
+    ("slate-mint", (38, 35, 25), (145, 210, 115)),
+    ("indigo-sunset", (65, 24, 38), (80, 105, 245)),
+]
 EFFECT_INTENSITY = os.environ.get(
     "CLIPFORGE_EFFECT_INTENSITY", "medium"
 ).strip().lower()
@@ -339,7 +353,7 @@ def score_candidates(duration, timeline):
     if duration <= MAX_CLIP_DURATION:
         windows = [(0.0, duration)]
     else:
-        lengths = [20.0, 25.0, 30.0, 40.0, 45.0, 50.0, 60.0]
+        lengths = [30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0]
         start = 0.0
         while start <= duration - MIN_CLIP_DURATION:
             for length in lengths:
@@ -583,6 +597,26 @@ def zoom_expression(mood, effect_names):
     return "min(1.045,1+0.025*(0.5-0.5*cos(2*PI*on/240)))"
 
 
+def create_clip_background(output_path, index):
+    """Create a repeatable, varied gradient palette for each rendered highlight."""
+    name, start_bgr, end_bgr = BACKGROUND_PALETTES[(index - 1) % len(BACKGROUND_PALETTES)]
+    height, width = 1280, 720
+    y, x = np.mgrid[0:height, 0:width].astype(np.float32)
+    blend = np.clip((y / (height - 1)) * 0.7 + (x / (width - 1)) * 0.3, 0, 1)
+    start = np.asarray(start_bgr, dtype=np.float32)
+    end = np.asarray(end_bgr, dtype=np.float32)
+    gradient = start[None, None, :] * (1 - blend[:, :, None]) + end[None, None, :] * blend[:, :, None]
+
+    glow = np.exp(
+        -(((x - width * 0.72) / (width * 0.58)) ** 2
+          + ((y - height * 0.28) / (height * 0.38)) ** 2)
+    )[:, :, None]
+    gradient = np.clip(gradient + glow * np.asarray(end_bgr, dtype=np.float32)[None, None, :] * 0.18, 0, 255)
+    if not cv2.imwrite(str(output_path), gradient.astype(np.uint8)):
+        raise RuntimeError(f"Unable to create background gradient: {output_path}")
+    return name, f"#{start_bgr[2]:02x}{start_bgr[1]:02x}{start_bgr[0]:02x}", f"#{end_bgr[2]:02x}{end_bgr[1]:02x}{end_bgr[0]:02x}"
+
+
 def classify_mood(transcript, clip, timeline):
     text = " ".join(
         seg.get("text", "").lower() for seg in transcript
@@ -698,6 +732,10 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
     clip_name = f"{stem}-highlight-{index:02d}.mp4"
     output_path = output_dir / clip_name
     ass_path = output_dir / f"{stem}-highlight-{index:02d}.ass"
+    background_path = output_dir / f"{stem}-highlight-{index:02d}-background.png"
+    background_name, background_color_start, background_color_end = create_clip_background(
+        background_path, index
+    )
 
     mood = classify_mood(transcript, clip, timeline)
     filter_name, effects = choose_visual_treatment(
@@ -719,8 +757,10 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         "[bgsrc]scale=720:1280:force_original_aspect_ratio=increase,"
         f"crop=720:1280,boxblur={blur},"
         "eq=brightness=-0.025:saturation=0.98[bg];"
+        "[1:v]scale=720:1280,format=rgba[palette];"
+        "[bg][palette]blend=all_mode=normal:all_opacity=0.72[coloredbg];"
         "[fgsrc]scale=720:1280:force_original_aspect_ratio=decrease[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,"
+        "[coloredbg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,"
         f"zoompan=z='{zoom}':"
         "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=720x1280:fps=24[vbase]"
     )
@@ -735,6 +775,8 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
         "-ss", str(clip["start"]), "-i", str(input_path)
     ]
+    command += ["-loop", "1", "-framerate", "24", "-i", str(background_path)]
+    music_input_index = 2
     if music_path:
         command += ["-stream_loop", "-1", "-i", str(music_path)]
     command += ["-t", str(duration)]
@@ -743,7 +785,7 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         audio_chain = (
             f"[0:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
             "aresample=44100,volume=1.0[voice];"
-            f"[1:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            f"[{music_input_index}:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
             "aresample=44100,volume=0.12,"
             "afade=t=in:st=0:d=1.0,"
             f"afade=t=out:st={max(0.0, duration - 2.0)}:d=2.0[music];"
@@ -759,7 +801,7 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         ]
     elif music_path:
         audio_chain = (
-            f"[1:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            f"[{music_input_index}:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
             "aresample=44100,volume=0.16,afade=t=in:st=0:d=1.0,"
             f"afade=t=out:st={max(0.0, duration - 2.0)}:d=2.0,"
             "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
@@ -779,6 +821,7 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         run_command(command)
     finally:
         ass_path.unlink(missing_ok=True)
+        background_path.unlink(missing_ok=True)
 
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError(f"FFmpeg did not create output clip: {clip_name}")
@@ -791,6 +834,8 @@ def render_clip(input_path, clip, index, transcript, profile, timeline, output_d
         "autoEdited": True,
         "framing": "9:16-blurred-background-with-fitted-foreground",
         "filter": filter_name,
+        "backgroundStyle": background_name,
+        "backgroundColors": [background_color_start, background_color_end],
         "selectedEffects": effects,
         "effects": effects,
         "backgroundBlur": {
@@ -861,6 +906,7 @@ def process_video(input_path):
         row["selectedClip"] = any(c["start"] <= row["time"] < c["end"] for c in clips)
 
     log(f"Selected {len(clips)} highlight(s). Rendering...")
+    random.shuffle(BACKGROUND_PALETTES)
     rendered = []
     for index, clip in enumerate(clips, 1):
         check_deadline()
