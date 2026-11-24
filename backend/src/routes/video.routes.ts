@@ -5,7 +5,6 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 const archiver: any = require('archiver');
-const ytdlp: any = require('yt-dlp-exec');
 const router = Router();
 const BASE_DIR = path.resolve(__dirname, '../..');
 const uploadDirectory = path.join(BASE_DIR, 'uploads');
@@ -112,6 +111,59 @@ function runExternal(command: string, args: string[], timeoutMs: number): Promis
       else reject(new Error(errorText.slice(-4000) || `${path.basename(command)} failed.`));
     });
   });
+}
+
+async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
+  const directCandidates = [
+    process.env.CLIPFORGE_YTDLP?.trim(),
+    'yt-dlp.exe',
+    'yt-dlp',
+    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp.exe'),
+    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp'),
+  ].filter((value): value is string => Boolean(value));
+
+  let lastError: unknown;
+  for (const candidate of directCandidates) {
+    if (candidate.toLowerCase().includes(path.sep) &&
+        !fs.existsSync(candidate)) {
+      continue;
+    }
+    try {
+      await runExternal(candidate, args, timeoutMs);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const pythonCandidates = [
+    process.env.CLIPFORGE_PYTHON?.trim(),
+    path.join(BASE_DIR, 'ai-venv', 'Scripts', 'python.exe'),
+    'python',
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of pythonCandidates) {
+    if (candidate.toLowerCase().includes(path.sep) &&
+        !fs.existsSync(candidate) &&
+        candidate !== 'python') {
+      continue;
+    }
+    try {
+      await runExternal(candidate, ['-m', 'yt_dlp', ...args], timeoutMs);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const message = lastError instanceof Error
+    ? lastError.message
+    : String(lastError ?? 'Unknown yt-dlp startup error.');
+  throw new Error(
+    `yt-dlp is unavailable or cannot start. Install it with ` +
+    `"winget install yt-dlp.yt-dlp", set CLIPFORGE_YTDLP, or install ` +
+    `"python -m pip install -U yt-dlp". Details: ${message}`
+  );
 }
 
 async function normalizeDownloadedVideo(
@@ -316,6 +368,12 @@ async function downloadPublicVideo(
 ): Promise<string> {
   const cookieOptions: Record<string, any> =
     platform === 'YouTube' ? getYouTubeCookieOptions() : {};
+  const cookieArgs: string[] = [];
+  if (typeof cookieOptions.cookies === 'string') {
+    cookieArgs.push('--cookies', cookieOptions.cookies);
+  } else if (typeof cookieOptions.cookiesFromBrowser === 'string') {
+    cookieArgs.push('--cookies-from-browser', cookieOptions.cookiesFromBrowser);
+  }
 
   if (platform === 'YouTube') {
     console.log(
@@ -337,7 +395,7 @@ async function downloadPublicVideo(
 
   if (process.env.CLIPFORGE_YTDLP_AUTO_UPDATE !== 'false') {
     try {
-      await ytdlp('--update', {}, { timeout: 60_000, windowsHide: true });
+      await runYtDlp(['--update'], 60_000);
       console.log('[URL IMPORT] yt-dlp update check completed.');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -349,6 +407,7 @@ async function downloadPublicVideo(
 
   for (let index = 0; index < formatCandidates.length; index += 1) {
     const format = formatCandidates[index];
+    if (!format) continue;
 
     const destinationDir = path.dirname(destinationPath);
     const destinationStem = path.basename(destinationPath, path.extname(destinationPath));
@@ -363,38 +422,35 @@ async function downloadPublicVideo(
     // path is not guaranteed to be the filename it writes on every version.
     const outputTemplate = path.join(destinationDir, `${destinationStem}.%(ext)s`);
 
-    const downloadOptions: Record<string, any> = {
-      noPlaylist: true,
-      noWarnings: true,
-      noProgress: true,
-      restrictFilenames: true,
-      format,
-      mergeOutputFormat: 'mp4',
-      remuxVideo: 'mp4',
-      noCheckCertificates: true,
-      geoBypass: true,
-      extractorRetries: 3,
-      forceIpv4: true,
-      extractorArgs: 'youtube:player_client=android,web',
-      maxFilesize: '1G',
-      socketTimeout: 60,
-      retries: 5,
-      fragmentRetries: 5,
-      concurrentFragments: 4,
-      output: outputTemplate,
-      ...cookieOptions
-    };
+    const downloadArgs = [
+      '--no-playlist',
+      '--no-warnings',
+      '--no-progress',
+      '--restrict-filenames',
+      '--format', format,
+      '--merge-output-format', 'mp4',
+      '--remux-video', 'mp4',
+      '--no-check-certificates',
+      '--geo-bypass',
+      '--extractor-retries', '3',
+      '--force-ipv4',
+      '--extractor-args', 'youtube:player_client=android,web',
+      '--max-filesize', '1G',
+      '--socket-timeout', '60',
+      '--retries', '5',
+      '--fragment-retries', '5',
+      '--concurrent-fragments', '4',
+      '--output', outputTemplate,
+      ...cookieArgs,
+      url
+    ];
 
     try {
       console.log(
         `[URL IMPORT] Trying format ${index + 1}/${formatCandidates.length}: ${format}`
       );
 
-      await ytdlp(
-        url,
-        downloadOptions,
-        { timeout: DOWNLOAD_TIMEOUT_MS, windowsHide: true }
-      );
+      await runYtDlp(downloadArgs, DOWNLOAD_TIMEOUT_MS);
 
       // Resolve the real file yt-dlp created rather than assuming the exact
       // destination extension. Ignore partial/temp files and empty files.
