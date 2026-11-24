@@ -1,0 +1,18 @@
+[Unit]
+Description=ClipForge AI video processing backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/clipforge-ai/backend
+EnvironmentFile=/etc/clipforge/backend.env
+StateDirectory=clipforge
+ExecStart=/usr/bin/node /opt/clipforge-ai/backend/dist/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

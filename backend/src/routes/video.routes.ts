@@ -11,12 +11,22 @@ const uploadDirectory = path.join(BASE_DIR, 'uploads');
 const outputDirectory = path.join(BASE_DIR, 'outputs');
 const aiEngineDirectory = path.join(BASE_DIR, 'ai_engine');
 const FFMPEG_PATH =
-  process.env.CLIPFORGE_FFMPEG || 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+  process.env.CLIPFORGE_FFMPEG ||
+  (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffmpeg.exe' : '/usr/bin/ffmpeg');
 const FFPROBE_PATH =
-  process.env.CLIPFORGE_FFPROBE || 'C:\\ffmpeg\\bin\\ffprobe.exe';
+  process.env.CLIPFORGE_FFPROBE ||
+  (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffprobe.exe' : '/usr/bin/ffprobe');
 const PYTHON_PATH =
   process.env.CLIPFORGE_PYTHON ||
-  path.join(BASE_DIR, 'ai-venv', 'Scripts', 'python.exe');
+  path.join(
+    BASE_DIR,
+    'ai-venv',
+    process.platform === 'win32' ? 'Scripts' : 'bin',
+    process.platform === 'win32' ? 'python.exe' : 'python'
+  );
+const PUBLIC_BACKEND_URL = (
+  process.env.PUBLIC_BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`
+).replace(/\/$/, '');
 const PYTHON_SCRIPT = path.join(
   aiEngineDirectory,
   'process_video.py'
@@ -651,9 +661,9 @@ async function processInputVideo(
       const clipDownloadPath =
         `/api/videos/clip-download/${jobId}/${encodeURIComponent(filename)}`;
       const absoluteClipPath =
-        `http://localhost:5000${clipPath}`;
+        `${PUBLIC_BACKEND_URL}${clipPath}`;
       const absoluteDownloadPath =
-        `http://localhost:5000${clipDownloadPath}`;
+        `${PUBLIC_BACKEND_URL}${clipDownloadPath}`;
       return {
         filename,
         // These paths are used by Angular for preview and download.*
@@ -703,7 +713,7 @@ async function processInputVideo(
       clips,
       jobId,
       downloadUrl: `/api/videos/download/${jobId}`,
-      downloadUrlAbsolute: `http://localhost:5000/api/videos/download/${jobId}`,
+      downloadUrlAbsolute: `${PUBLIC_BACKEND_URL}/api/videos/download/${jobId}`,
       highlightCount: aiResult.totalClips ?? clips.length,
       highlights: clips,
       expiresInMinutes: 30,
