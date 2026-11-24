@@ -18,6 +18,10 @@ export class FirebaseAuthService {
   private firebaseAuth: Auth | null = null;
   private recaptchaVerifier: RecaptchaVerifier | null = null;
 
+  get projectId(): string {
+    return environment.firebase.projectId;
+  }
+
   get isConfigured(): boolean {
     const config = environment.firebase;
     return Boolean(
@@ -35,7 +39,16 @@ export class FirebaseAuthService {
       );
     }
     if (!this.firebaseAuth) {
-      const app = getApps()[0] || initializeApp(environment.firebase);
+      const app = getApps().find(candidate => candidate.name === '[DEFAULT]')
+        || initializeApp(environment.firebase);
+      if (
+        app.options.projectId !== environment.firebase.projectId ||
+        app.options.apiKey !== environment.firebase.apiKey
+      ) {
+        throw new Error(
+          `Firebase was initialized for project "${app.options.projectId}", but this app is configured for "${environment.firebase.projectId}". Restart the frontend and check environment.ts.`
+        );
+      }
       this.firebaseAuth = getAuth(app);
     }
     return this.firebaseAuth;

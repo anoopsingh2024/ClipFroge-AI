@@ -78,6 +78,7 @@ export class AuthPage implements OnInit, OnDestroy {
       this.infoMessage = `Verification code sent to ${e164}.`;
       this.startCooldown();
     } catch (error) {
+      this.logFirebaseError(error);
       this.errorMessage = this.describeError(error);
       this.firebase.clearRecaptcha();
     } finally {
@@ -153,7 +154,7 @@ export class AuthPage implements OnInit, OnDestroy {
       const code = (error as Error & { code?: string }).code;
       switch (code) {
         case 'auth/operation-not-allowed':
-          return 'Enable Phone Authentication in Firebase Console → Authentication → Sign-in method.';
+          return `Firebase project "${this.firebase.projectId}" is rejecting phone sign-in. Since Phone is enabled, verify that environment.ts apiKey belongs to this same project, the Identity Toolkit API is enabled and allowed for that API key, then stop and restart ng serve.`;
         case 'auth/unauthorized-domain':
           return 'Add localhost to Firebase Authentication → Settings → Authorized domains.';
         case 'auth/invalid-phone-number':
@@ -185,5 +186,14 @@ export class AuthPage implements OnInit, OnDestroy {
 
   private refreshView(): void {
     if (!this.destroyed) this.changeDetector.detectChanges();
+  }
+
+  private logFirebaseError(error: unknown): void {
+    if (error instanceof Error) {
+      const code = (error as Error & { code?: string }).code || 'unknown';
+      console.error('[AUTH] Phone verification failed:', code, error.message);
+    } else {
+      console.error('[AUTH] Phone verification failed with an unknown error.');
+    }
   }
 }
