@@ -129,13 +129,13 @@ function runExternal(command: string, args: string[], timeoutMs: number): Promis
 
 async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
   const directCandidates = [
-    process.env.CLIPFORGE_YTDLP?.trim(),
     path.join(
       BASE_DIR,
       'ai-venv',
       process.platform === 'win32' ? 'Scripts' : 'bin',
       process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
     ),
+    process.env.CLIPFORGE_YTDLP?.trim(),
     'yt-dlp.exe',
     'yt-dlp',
     path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp.exe'),
@@ -157,13 +157,13 @@ async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
   }
 
   const pythonCandidates = [
-    process.env.CLIPFORGE_PYTHON?.trim(),
     path.join(
       BASE_DIR,
       'ai-venv',
       process.platform === 'win32' ? 'Scripts' : 'bin',
       process.platform === 'win32' ? 'python.exe' : 'python'
     ),
+    process.env.CLIPFORGE_PYTHON?.trim(),
     'python3',
     'python',
   ].filter((value): value is string => Boolean(value));
