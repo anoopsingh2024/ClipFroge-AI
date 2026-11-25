@@ -197,24 +197,56 @@ async function normalizeDownloadedVideo(
     return downloadedPath;
   }
 
-  await runExternal(
-    FFMPEG_PATH,
-    [
-      '-hide_banner', '-loglevel', 'error', '-y',
-      '-i', downloadedPath,
-      '-map', '0:v:0',
-      '-map', '0:a:0?',
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '21',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-movflags', '+faststart',
-      mp4Path
-    ],
-    20 * 60 * 1000
-  );
+  try {
+    await runExternal(
+      FFMPEG_PATH,
+      [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-i', downloadedPath,
+        '-map', '0:v:0',
+        '-map', '0:a:0?',
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        mp4Path
+      ],
+      20 * 60 * 1000
+    );
+  } catch (remuxError) {
+    await removeFile(mp4Path);
+    console.warn(
+      '[URL IMPORT] Lossless MP4 remux unavailable; transcoding for compatibility.'
+    );
+    try {
+      await runExternal(
+        FFMPEG_PATH,
+        [
+          '-hide_banner', '-loglevel', 'error', '-y',
+          '-i', downloadedPath,
+          '-map', '0:v:0',
+          '-map', '0:a:0?',
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '21',
+          '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-movflags', '+faststart',
+          mp4Path
+        ],
+        20 * 60 * 1000
+      );
+    } catch (transcodeError) {
+      const remuxMessage = remuxError instanceof Error
+        ? remuxError.message
+        : String(remuxError);
+      const transcodeMessage = transcodeError instanceof Error
+        ? transcodeError.message
+        : String(transcodeError);
+      throw new Error(
+        `MP4 remux failed: ${remuxMessage}; compatibility transcode failed: ${transcodeMessage}`
+      );
+    }
+  }
 
   const stat = await fs.promises.stat(mp4Path);
   if (!stat.isFile() || stat.size === 0) {
@@ -403,7 +435,7 @@ async function downloadPublicVideo(
     'best'
   ];
 
-  if (process.env.CLIPFORGE_YTDLP_AUTO_UPDATE !== 'false') {
+  if (process.env.CLIPFORGE_YTDLP_AUTO_UPDATE === 'true') {
     try {
       await runYtDlp(['--update'], 60_000);
       console.log('[URL IMPORT] yt-dlp update check completed.');

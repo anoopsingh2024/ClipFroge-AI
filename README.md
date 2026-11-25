@@ -20,6 +20,12 @@ Each rendered clip now reports its selected `filter`, `effects`, and
 `backgroundBlur` metadata while preserving the existing `selectedEffects`
 field for API compatibility.
 
+YouTube/Facebook imports do not check for a `yt-dlp` update on every request.
+Update `yt-dlp` as part of deployment maintenance, or temporarily set
+`CLIPFORGE_YTDLP_AUTO_UPDATE=true` to enable the per-import update check.
+When an import needs MP4 normalization, ClipForge tries a lossless stream-copy
+remux first and only re-encodes if the source codecs are not MP4-compatible.
+
 Automatic highlights are 30–60 seconds long. Each clip also gets a distinct
 color-gradient background palette (including black/orange, green, blue/cyan,
 purple/pink, and other combinations), blended with the blurred source layer.
