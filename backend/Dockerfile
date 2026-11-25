@@ -15,6 +15,7 @@ RUN apt-get update \
        python3 \
        python3-pip \
        python3-venv \
+    && ln -s /usr/bin/python3 /usr/local/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/clipforge-ai/backend
