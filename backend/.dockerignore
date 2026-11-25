@@ -1,0 +1,9 @@
+node_modules
+dist
+ai-venv
+uploads
+outputs
+.env
+.env.*
+!.env.example
+npm-debug.log

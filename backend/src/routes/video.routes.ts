@@ -7,8 +7,12 @@ import { randomUUID } from 'crypto';
 const archiver: any = require('archiver');
 const router = Router();
 const BASE_DIR = path.resolve(__dirname, '../..');
-const uploadDirectory = path.join(BASE_DIR, 'uploads');
-const outputDirectory = path.join(BASE_DIR, 'outputs');
+const uploadDirectory = path.resolve(
+  process.env.CLIPFORGE_UPLOAD_DIR || path.join(BASE_DIR, 'uploads')
+);
+const outputDirectory = path.resolve(
+  process.env.CLIPFORGE_OUTPUT_DIR || path.join(BASE_DIR, 'outputs')
+);
 const aiEngineDirectory = path.join(BASE_DIR, 'ai_engine');
 const FFMPEG_PATH =
   process.env.CLIPFORGE_FFMPEG ||
