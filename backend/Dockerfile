@@ -2,6 +2,7 @@ FROM node:22-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV CLIPFORGE_PYTHON=/opt/clipforge-ai/ai-venv/bin/python
+ENV CLIPFORGE_YTDLP=/opt/clipforge-ai/ai-venv/bin/yt-dlp
 ENV CLIPFORGE_FFMPEG=/usr/bin/ffmpeg
 ENV CLIPFORGE_FFPROBE=/usr/bin/ffprobe
 ENV CLIPFORGE_UPLOAD_DIR=/var/data/uploads
