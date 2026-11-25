@@ -1,8 +1,8 @@
 FROM node:22-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1
-ENV CLIPFORGE_PYTHON=/opt/clipforge-ai/ai-venv/bin/python
-ENV CLIPFORGE_YTDLP=/opt/clipforge-ai/ai-venv/bin/yt-dlp
+ENV CLIPFORGE_PYTHON=/opt/clipforge-ai/backend/ai-venv/bin/python
+ENV CLIPFORGE_YTDLP=/opt/clipforge-ai/backend/ai-venv/bin/yt-dlp
 ENV CLIPFORGE_FFMPEG=/usr/bin/ffmpeg
 ENV CLIPFORGE_FFPROBE=/usr/bin/ffprobe
 ENV CLIPFORGE_UPLOAD_DIR=/var/data/uploads
@@ -25,9 +25,9 @@ COPY package*.json ./
 RUN npm ci
 
 COPY ai_engine/requirements.txt ./ai_engine/requirements.txt
-RUN python3 -m venv /opt/clipforge-ai/ai-venv \
-    && /opt/clipforge-ai/ai-venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/clipforge-ai/ai-venv/bin/pip install --no-cache-dir -r ai_engine/requirements.txt
+RUN python3 -m venv /opt/clipforge-ai/backend/ai-venv \
+    && /opt/clipforge-ai/backend/ai-venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/clipforge-ai/backend/ai-venv/bin/pip install --no-cache-dir -r ai_engine/requirements.txt
 
 COPY . .
 RUN npm run build \
