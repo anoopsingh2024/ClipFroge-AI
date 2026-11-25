@@ -20,7 +20,7 @@ from faster_whisper import WhisperModel
 BASE_DIR = Path(__file__).resolve().parent.parent
 FFMPEG = os.environ.get("CLIPFORGE_FFMPEG", r"C:\ffmpeg\bin\ffmpeg.exe")
 FFPROBE = os.environ.get("CLIPFORGE_FFPROBE", r"C:\ffmpeg\bin\ffprobe.exe")
-OUTPUT_DIR = Path(os.environ.get("CLIPFORGE_OUTPUT_DIR", BASE_DIR / "outputs"))
+OUTPUT_DIR = BASE_DIR / "outputs"
 TEMP_DIR = OUTPUT_DIR / "_analysis"
 MUSIC_DIR = BASE_DIR / "music"
 MUSIC_CATALOG = MUSIC_DIR / "catalog.json"

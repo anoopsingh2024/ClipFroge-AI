@@ -7,12 +7,8 @@ import { randomUUID } from 'crypto';
 const archiver: any = require('archiver');
 const router = Router();
 const BASE_DIR = path.resolve(__dirname, '../..');
-const uploadDirectory = path.resolve(
-  process.env.CLIPFORGE_UPLOAD_DIR || path.join(BASE_DIR, 'uploads')
-);
-const outputDirectory = path.resolve(
-  process.env.CLIPFORGE_OUTPUT_DIR || path.join(BASE_DIR, 'outputs')
-);
+const uploadDirectory = path.join(BASE_DIR, 'uploads');
+const outputDirectory = path.join(BASE_DIR, 'outputs');
 const aiEngineDirectory = path.join(BASE_DIR, 'ai_engine');
 const FFMPEG_PATH =
   process.env.CLIPFORGE_FFMPEG ||
@@ -128,52 +124,15 @@ function runExternal(command: string, args: string[], timeoutMs: number): Promis
 }
 
 async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
-  const pythonCandidates = [
-    path.join(
-      BASE_DIR,
-      'ai-venv',
-      process.platform === 'win32' ? 'Scripts' : 'bin',
-      process.platform === 'win32' ? 'python.exe' : 'python'
-    ),
-    process.env.CLIPFORGE_PYTHON?.trim(),
-    'python3',
-    'python',
-  ].filter((value, index, candidates): value is string =>
-    Boolean(value) && candidates.indexOf(value) === index
-  );
-
-  let lastError: unknown;
-  for (const candidate of pythonCandidates) {
-    if (candidate.toLowerCase().includes(path.sep) &&
-        !fs.existsSync(candidate) &&
-        candidate !== 'python') {
-      continue;
-    }
-    try {
-      await runExternal(candidate, ['-c', 'import yt_dlp'], 10_000);
-    } catch (error) {
-      lastError = error;
-      continue;
-    }
-
-    try {
-      console.log(`[URL IMPORT] Running yt-dlp with ${candidate}`);
-      await runExternal(candidate, ['-m', 'yt_dlp', ...args], timeoutMs);
-      return;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`yt-dlp failed: ${message}`);
-    }
-  }
-
   const directCandidates = [
     process.env.CLIPFORGE_YTDLP?.trim(),
     'yt-dlp.exe',
     'yt-dlp',
-  ].filter((value, index, candidates): value is string =>
-    Boolean(value) && candidates.indexOf(value) === index
-  );
+    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp.exe'),
+    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp'),
+  ].filter((value): value is string => Boolean(value));
 
+  let lastError: unknown;
   for (const candidate of directCandidates) {
     if (candidate.toLowerCase().includes(path.sep) &&
         !fs.existsSync(candidate)) {
@@ -183,16 +142,37 @@ async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
       await runExternal(candidate, args, timeoutMs);
       return;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`yt-dlp failed: ${message}`);
+      lastError = error;
     }
   }
 
-  const details = lastError instanceof Error ? lastError.message : String(lastError ?? '');
+  const pythonCandidates = [
+    process.env.CLIPFORGE_PYTHON?.trim(),
+    path.join(BASE_DIR, 'ai-venv', 'Scripts', 'python.exe'),
+    'python',
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of pythonCandidates) {
+    if (candidate.toLowerCase().includes(path.sep) &&
+        !fs.existsSync(candidate) &&
+        candidate !== 'python') {
+      continue;
+    }
+    try {
+      await runExternal(candidate, ['-m', 'yt_dlp', ...args], timeoutMs);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const message = lastError instanceof Error
+    ? lastError.message
+    : String(lastError ?? 'Unknown yt-dlp startup error.');
   throw new Error(
-    `No usable yt-dlp installation was found. Install yt-dlp in the configured ` +
-    `Python environment or set CLIPFORGE_YTDLP to its executable. ` +
-    `Python check details: ${details || 'no Python runtime was found.'}`
+    `yt-dlp is unavailable or cannot start. Install it with ` +
+    `"winget install yt-dlp.yt-dlp", set CLIPFORGE_YTDLP, or install ` +
+    `"python -m pip install -U yt-dlp". Details: ${message}`
   );
 }
 

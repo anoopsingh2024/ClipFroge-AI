@@ -13,17 +13,9 @@ const app = express();
 app.set('trust proxy', 1);
 
 // CORS configuration
-const configuredOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean);
-
 app.use(
   cors({
-    origin: [
-      ...configuredOrigins,
-      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
-    ],
+    origin: process.env.FRONTEND_ORIGIN || 'http://localhost:4200',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
@@ -99,7 +91,7 @@ app.use(
 // Start server
 const PORT = Number(process.env.PORT) || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('====================================');
   console.log('🚀 ClipForge AI Backend Started');

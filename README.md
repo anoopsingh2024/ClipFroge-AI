@@ -135,38 +135,6 @@ the tunnel restarts, and this temporary link is not a permanent deployment.
 Anyone with the link can access the app, and video processing uses the host
 computer's resources.
 
-## Deploy the backend to Render
-
-Create a Render **Web Service** from this repository and select the
-`fix/youtube-import-performance` branch. Set the runtime to Docker and the
-Dockerfile path to `backend/Dockerfile`. The included image installs Node.js,
-FFmpeg, Python and the AI dependencies. Set the health check path to
-`/api/health`.
-
-Video processing can take several minutes and uses significant CPU and memory.
-Use a paid instance with at least 4 GB RAM (8 GB is preferable for large
-videos); the free instance has only 512 MB RAM, can sleep, and does not support
-persistent disks. Attach a persistent disk mounted at `/var/data` (at least
-20 GB; budget more for concurrent jobs).
-Set these Render environment variables:
-
-```text
-FRONTEND_ORIGIN=https://YOUR-FRONTEND-DOMAIN,https://localhost
-PUBLIC_BACKEND_URL=https://YOUR-SERVICE.onrender.com
-CLIPFORGE_UPLOAD_DIR=/var/data/uploads
-CLIPFORGE_OUTPUT_DIR=/var/data/outputs
-HF_HOME=/var/data/huggingface
-```
-
-Replace the example hostnames with your actual frontend and backend URLs. The
-backend URL is available in the Render service dashboard. Once deployed,
-verify `https://YOUR-SERVICE.onrender.com/api/health` returns JSON. For the
-Android app, set `apiUrl` in `frontend/src/environments/environment.ts` to
-`https://YOUR-SERVICE.onrender.com/api`, rebuild the Angular app, run
-`npx cap sync android`, and build a new APK. Configure Render CORS to include
-the exact web frontend origin as well as `https://localhost` for the
-Capacitor Android WebView.
-
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with
