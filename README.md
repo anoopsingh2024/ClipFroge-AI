@@ -114,27 +114,6 @@ After deployment, the URL `https://YOUR_DOMAIN` (or `http://YOUR_SERVER_IP`)
 is reachable from other phones, laptops and networks. This is an open public
 service with no sign-in; monitor server resources and costs.
 
-## Temporary sharing from Windows
-
-For a temporary link without a VPS, install Cloudflare Tunnel:
-
-```powershell
-winget install --id Cloudflare.cloudflared
-```
-
-In separate terminals, start the backend and frontend using the normal local
-development instructions. Then, from the repository root, run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\share-local.ps1
-```
-
-Open the `https://*.trycloudflare.com` URL printed by `cloudflared` and share
-it while the tunnel and both local servers are running. The URL changes when
-the tunnel restarts, and this temporary link is not a permanent deployment.
-Anyone with the link can access the app, and video processing uses the host
-computer's resources.
-
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with
