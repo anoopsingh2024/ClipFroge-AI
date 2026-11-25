@@ -37,6 +37,21 @@ graph peaks are detected by prominence, added as a scoring signal, and exposed
 as `interestPeak`/`peakProminence` on timeline points. The upload timeline
 highlights selected clip regions and graph peaks with a legend.
 
+## Create an illustrated video from text
+
+Open **Text to Video** in the home-page navigation to paste text or upload a
+`.txt`/`.md` file. The local renderer creates a one-minute, six-scene cartoon
+or documentary-style illustrated storyboard, offline system-voice narration,
+one of the included CC0 music tracks, and synthesized transition sounds. It
+does not generate AI footage or animated characters; the scene art is drawn
+locally and the narration uses voices installed on the computer.
+
+Install the updated backend Python requirements with
+`backend\ai-venv\Scripts\pip install -r backend\ai_engine\requirements.txt`
+from the repository root on Windows. Choose English or Hindi narration in the
+page; Hindi requires a Hindi speech voice installed in Windows speech
+settings. Generated video is written to `backend/outputs`.
+
 ## Public VPS deployment
 
 The app needs a server reachable from the internet; `localhost` only works on

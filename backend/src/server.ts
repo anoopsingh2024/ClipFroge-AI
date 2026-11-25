@@ -8,6 +8,7 @@ dotenv.config();
 
 import videoRoutes from './routes/video.routes';
 import editorRoutes from './routes/editor.routes';
+import textVideoRoutes from './routes/text-video.routes';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -50,6 +51,7 @@ app.use('/api/videos', videoRoutes);
 
 // Video Editor API routes
 app.use('/api/editor', editorRoutes);
+app.use('/api/text-video', textVideoRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -1,0 +1,92 @@
+<main class="text-video-page">
+  <div class="text-video-container">
+    <a class="back-link" routerLink="/">← Back to ClipForge</a>
+
+    <header class="page-heading">
+      <span class="eyebrow">LOCAL STORY CREATOR</span>
+      <h1>Turn text into a <span>one-minute story</span></h1>
+      <p>
+        Upload a TXT/MD file or paste text. Create six illustrated scenes
+        with offline narration, original background music and sound effects.
+      </p>
+      <div class="notice">
+        Runs on this computer; no paid AI API. Scenes are illustrated storyboards,
+        not AI-generated footage or character animation.
+      </div>
+    </header>
+
+    <section class="creator-card">
+      <label class="field-label" for="story-text">Your story or document</label>
+      <div class="file-row">
+        <input
+          #textFile
+          class="hidden-input"
+          type="file"
+          accept=".txt,.md,text/plain,text/markdown"
+          (change)="onTextFileSelected($event)" />
+        <button class="file-button" type="button" (click)="textFile.click()">
+          Choose TXT / MD file
+        </button>
+        <span>{{ text.length.toLocaleString() }} / {{ maxCharacters.toLocaleString() }} characters</span>
+      </div>
+      <textarea
+        id="story-text"
+        [(ngModel)]="text"
+        (ngModelChange)="result = null"
+        [maxlength]="maxCharacters"
+        rows="12"
+        placeholder="Paste your story, facts or document text here..."></textarea>
+
+      <div class="options">
+        <label>
+          <span>Illustration style</span>
+          <select [(ngModel)]="style">
+            <option value="cartoon">Cartoon story</option>
+            <option value="documentary">Documentary infographic</option>
+          </select>
+        </label>
+        <label>
+          <span>Offline narration language</span>
+          <select [(ngModel)]="language">
+            <option value="en">English</option>
+            <option value="hi">Hindi (requires an installed Hindi voice)</option>
+          </select>
+        </label>
+      </div>
+
+      <button
+        class="generate-button"
+        type="button"
+        [disabled]="!text.trim() || isGenerating"
+        (click)="generate()">
+        {{ isGenerating ? 'Creating your 60-second video...' : 'Create 1-minute video' }}
+      </button>
+
+      <p class="progress-note" *ngIf="isGenerating">
+        Drawing six scenes, generating narration, and mixing music and sound effects.
+        Keep this page open while it renders.
+      </p>
+      <div class="error-message" role="alert" *ngIf="errorMessage">{{ errorMessage }}</div>
+    </section>
+
+    <section class="result-card" *ngIf="result as video">
+      <div class="result-heading">
+        <div>
+          <span class="eyebrow">VIDEO READY</span>
+          <h2>Your illustrated story is ready</h2>
+          <p>60 seconds · {{ video.style }} · {{ video.voice }} voice · {{ video.music }} music</p>
+        </div>
+        <a class="download-button" [href]="resolveVideoUrl(video.url)" download>
+          Download MP4
+        </a>
+      </div>
+      <video [src]="resolveVideoUrl(video.url)" controls playsinline preload="metadata"></video>
+      <details>
+        <summary>View the six scene scripts</summary>
+        <ol>
+          <li *ngFor="let scene of video.scenes">{{ scene }}</li>
+        </ol>
+      </details>
+    </section>
+  </div>
+</main>
