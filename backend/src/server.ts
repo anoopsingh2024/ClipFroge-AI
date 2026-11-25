@@ -13,12 +13,17 @@ const app = express();
 app.set('trust proxy', 1);
 
 // CORS configuration
+const configuredOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: (process.env.FRONTEND_ORIGIN || 'http://localhost:4200')
-      .split(',')
-      .map(origin => origin.trim())
-      .filter(Boolean),
+    origin: [
+      ...configuredOrigins,
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
