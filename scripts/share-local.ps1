@@ -1,7 +1,14 @@
 $ErrorActionPreference = 'Stop'
 
-if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-  throw 'cloudflared is not installed. Install it with: winget install --id Cloudflare.cloudflared'
+$cloudflaredCommand = Get-Command cloudflared -ErrorAction SilentlyContinue
+$cloudflaredPath = if ($cloudflaredCommand) {
+  $cloudflaredCommand.Source
+} else {
+  Join-Path $env:LOCALAPPDATA 'cloudflared\cloudflared.exe'
+}
+
+if (-not (Test-Path $cloudflaredPath -PathType Leaf)) {
+  throw 'cloudflared was not found. Download https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe and save it as %LOCALAPPDATA%\cloudflared\cloudflared.exe.'
 }
 
 foreach ($service in @(
@@ -19,7 +26,7 @@ Write-Host 'Starting a temporary public URL. Keep this window and both app serve
 Write-Host 'Share the https://*.trycloudflare.com URL printed below.'
 Write-Warning 'Anyone with the URL can use this app while the tunnel is running.'
 
-& cloudflared tunnel --url http://localhost:4200 --http-host-header localhost:4200
+& $cloudflaredPath tunnel --url http://localhost:4200 --http-host-header localhost:4200
 if ($LASTEXITCODE -ne 0) {
   throw "cloudflared exited with code $LASTEXITCODE."
 }
