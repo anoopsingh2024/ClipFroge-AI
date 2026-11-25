@@ -27,7 +27,9 @@ RUN npm ci
 COPY ai_engine/requirements.txt ./ai_engine/requirements.txt
 RUN python3 -m venv /opt/clipforge-ai/backend/ai-venv \
     && /opt/clipforge-ai/backend/ai-venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/clipforge-ai/backend/ai-venv/bin/pip install --no-cache-dir -r ai_engine/requirements.txt
+    && /opt/clipforge-ai/backend/ai-venv/bin/pip install --no-cache-dir -r ai_engine/requirements.txt \
+    && /opt/clipforge-ai/backend/ai-venv/bin/python -c "import yt_dlp" \
+    && /opt/clipforge-ai/backend/ai-venv/bin/python -m yt_dlp --version
 
 COPY . .
 RUN npm run build \
