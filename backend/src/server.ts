@@ -25,14 +25,21 @@ const allowedOrigins = new Set(
       .filter(Boolean)
   ]
 );
+const netlifyDeployPreviewOrigin =
+  /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?--clipfroge-ai\.netlify\.app$/i;
+
+function isAllowedOrigin(origin: string): boolean {
+  return allowedOrigins.has(origin) || netlifyDeployPreviewOrigin.test(origin);
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      callback(null, !origin || allowedOrigins.has(origin));
+      callback(null, !origin || isAllowedOrigin(origin));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 204,
     credentials: true
   })
 );
