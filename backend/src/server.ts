@@ -13,28 +13,18 @@ import textVideoRoutes from './routes/text-video.routes';
 const app = express();
 app.set('trust proxy', 1);
 
-const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = new Set(
-  (process.env.FRONTEND_ORIGIN || '')
-    .split(',')
-    .map(origin => origin.trim())
-    .filter(Boolean)
-    .filter(origin => {
-      if (!isProduction) return true;
-      try {
-        return !['localhost', '127.0.0.1', '[::1]'].includes(
-          new URL(origin).hostname
-        );
-      } catch {
-        return false;
-      }
-    })
+  [
+    'https://clipfroge-ai.netlify.app',
+    'https://6b07bfb23c27c9eedd812626--clipfroge-ai.netlify.app',
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    ...(process.env.FRONTEND_ORIGIN || '')
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(Boolean)
+  ]
 );
-
-if (!isProduction) {
-  allowedOrigins.add('http://localhost:4200');
-  allowedOrigins.add('http://127.0.0.1:4200');
-}
 
 app.use(
   cors({

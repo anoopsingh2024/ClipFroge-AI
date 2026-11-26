@@ -133,10 +133,11 @@ service with no sign-in; monitor server resources and costs.
 
 The repository-root `Dockerfile` builds the backend and its FFmpeg/Python
 runtime. For Render, leave **Root Directory** empty, set **Dockerfile Path**
-to `./Dockerfile`, and set **Docker Build Context Directory** to `.`. Configure
-`FRONTEND_ORIGIN` in the service environment to the deployed frontend's exact
-origin (comma-separated if there is more than one) and
-`PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com`. The frontend
+to `./Dockerfile`, and set **Docker Build Context Directory** to `.`. The
+backend allows the production Netlify site and its current preview origin, as
+well as Angular localhost development origins. Configure `FRONTEND_ORIGIN` in
+the service environment for any additional frontend origins (comma-separated)
+and set `PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com`. The frontend
 production build uses that backend's `/api` endpoint; its development build
 continues to use the local `/api` proxy. Render's local filesystem is
 ephemeral, so uploaded and generated videos are not retained across restarts.
