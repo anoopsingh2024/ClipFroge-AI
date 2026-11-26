@@ -129,6 +129,13 @@ After deployment, the URL `https://YOUR_DOMAIN` (or `http://YOUR_SERVER_IP`)
 is reachable from other phones, laptops and networks. This is an open public
 service with no sign-in; monitor server resources and costs.
 
+## Docker deployment
+
+The repository-root `Dockerfile` builds the backend and its FFmpeg/Python
+runtime. For a Docker-based host, build from the repository root and leave the
+service root directory unset. Set `FRONTEND_ORIGIN` to the deployed frontend's
+origin and `PUBLIC_BACKEND_URL` to the backend's public URL.
+
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with

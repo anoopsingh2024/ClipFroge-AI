@@ -1,0 +1,15 @@
+.git
+.github
+.vscode
+frontend
+backend/node_modules
+backend/dist
+backend/ai-venv
+backend/venv
+backend/uploads
+backend/outputs
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
