@@ -27,6 +27,7 @@ ENV NODE_ENV=production \
     CLIPFORGE_FFMPEG=/usr/bin/ffmpeg \
     CLIPFORGE_FFPROBE=/usr/bin/ffprobe \
     CLIPFORGE_PYTHON=/opt/clipforge-venv/bin/python \
+    PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com \
     PORT=5000
 
 EXPOSE 5000

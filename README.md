@@ -119,10 +119,10 @@ site, Express API, FFmpeg and Python AI engine. For video jobs, choose at least
    sudo systemctl reload nginx
    ```
 7. Allow inbound ports 22 and 80 (and 443 for HTTPS) in the VPS firewall.
-   Keep backend port 5000 private; the included service listens only on
-   `127.0.0.1`. For a domain, install Certbot with
-   `sudo apt install -y certbot python3-certbot-nginx`, then run
-   `sudo certbot --nginx -d YOUR_DOMAIN`.
+   Keep backend port 5000 closed to public inbound traffic; the app listens on
+   `0.0.0.0` for reverse-proxy and container compatibility. For a domain,
+   install Certbot with `sudo apt install -y certbot python3-certbot-nginx`,
+   then run `sudo certbot --nginx -d YOUR_DOMAIN`.
 
 The Nginx config supports 1 GB uploads and long-running video processing.
 After deployment, the URL `https://YOUR_DOMAIN` (or `http://YOUR_SERVER_IP`)
@@ -132,9 +132,14 @@ service with no sign-in; monitor server resources and costs.
 ## Docker deployment
 
 The repository-root `Dockerfile` builds the backend and its FFmpeg/Python
-runtime. For a Docker-based host, build from the repository root and leave the
-service root directory unset. Set `FRONTEND_ORIGIN` to the deployed frontend's
-origin and `PUBLIC_BACKEND_URL` to the backend's public URL.
+runtime. For Render, leave **Root Directory** empty, set **Dockerfile Path**
+to `./Dockerfile`, and set **Docker Build Context Directory** to `.`. Configure
+`FRONTEND_ORIGIN` in the service environment to the deployed frontend's exact
+origin (comma-separated if there is more than one) and
+`PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com`. The frontend
+production build uses that backend's `/api` endpoint; its development build
+continues to use the local `/api` proxy. Render's local filesystem is
+ephemeral, so uploaded and generated videos are not retained across restarts.
 
 ## Hindi and English captions
 

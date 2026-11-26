@@ -25,8 +25,12 @@ const PYTHON_PATH =
     process.platform === 'win32' ? 'python.exe' : 'python'
   );
 const PUBLIC_BACKEND_URL = (
-  process.env.PUBLIC_BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`
-).replace(/\/$/, '');
+  process.env.PUBLIC_BACKEND_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? ''
+    : `http://localhost:${process.env.PORT || 5000}`)
+).replace(/\/+$/, '');
 const PYTHON_SCRIPT = path.join(
   aiEngineDirectory,
   'process_video.py'
