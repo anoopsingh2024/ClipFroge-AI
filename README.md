@@ -101,8 +101,7 @@ site, Express API, FFmpeg and Python AI engine. For video jobs, choose at least
    sudo cp /opt/clipforge-ai/backend/.env.example /etc/clipforge/backend.env
    ```
 
-   Set
-   `FRONTEND_ORIGIN` and `PUBLIC_BACKEND_URL` to your public domain (or
+   Set `PUBLIC_BACKEND_URL` to your public domain (or
    `http://YOUR_SERVER_IP` without a domain), and verify FFmpeg, FFprobe, and
    Python paths. On Ubuntu these are `/usr/bin/ffmpeg`, `/usr/bin/ffprobe`,
    and `/opt/clipforge-ai/backend/ai-venv/bin/python`. Use
@@ -134,13 +133,19 @@ service with no sign-in; monitor server resources and costs.
 The repository-root `Dockerfile` builds the backend and its FFmpeg/Python
 runtime. For Render, leave **Root Directory** empty, set **Dockerfile Path**
 to `./Dockerfile`, and set **Docker Build Context Directory** to `.`. The
-backend allows the production Netlify site and its current preview origin, as
-well as Angular localhost development origins. Configure `FRONTEND_ORIGIN` in
-the service environment for any additional frontend origins (comma-separated)
-and set `PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com`. The frontend
-production build uses that backend's `/api` endpoint; its development build
-continues to use the local `/api` proxy. Render's local filesystem is
+backend allows the production Netlify site, matching Netlify deploy-preview
+domains, and Angular localhost development origins. Other external origins are
+rejected. Set `PUBLIC_BACKEND_URL=https://clipfroge-ai-1.onrender.com`. The
+frontend production build uses that backend's `/api` endpoint; its development
+build continues to use the local `/api` proxy. Render's local filesystem is
 ephemeral, so uploaded and generated videos are not retained across restarts.
+
+To import YouTube videos that require account verification, upload a valid
+`cookies.txt` as a Render Secret File and set
+`CLIPFORGE_YTDLP_COOKIES=/etc/secrets/cookies.txt` in the backend service
+environment. The backend checks that this file is readable before passing it
+to yt-dlp. Cookies are optional for public videos; never commit or share the
+cookies file.
 
 ## Netlify frontend deployment
 

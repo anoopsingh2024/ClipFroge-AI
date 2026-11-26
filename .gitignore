@@ -4,6 +4,7 @@ dist/
 .env
 .env.*
 !.env.example
+*cookie*.txt
 ai-venv/
 venv/
 __pycache__/

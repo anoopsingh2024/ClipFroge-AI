@@ -1,3 +1,9 @@
+// export const environment = {
+//   apiUrl: '/api'
+// };
+
+
 export const environment = {
-  apiUrl: '/api'
+  production: true,
+  apiUrl: 'https://clipfroge-ai-1.onrender.com/api'
 };

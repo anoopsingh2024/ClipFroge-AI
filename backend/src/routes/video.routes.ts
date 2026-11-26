@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { getYouTubeCookieArgs } from '../utils/yt-dlp-cookies';
 const archiver: any = require('archiver');
 const router = Router();
 const BASE_DIR = path.resolve(__dirname, '../..');
@@ -382,62 +383,24 @@ function validateVideoUrl(
     message: 'Only YouTube and Facebook URLs are accepted.'
   };
 }
-function getYouTubeCookieOptions(): Record<string, string> {
-  // Set CLIPFORGE_YTDLP_COOKIES to a cookies.txt path if you manage one yourself.
-  const cookiesFile = process.env.CLIPFORGE_YTDLP_COOKIES?.trim();
-
-  if (cookiesFile) {
-    return { cookies: path.resolve(cookiesFile) };
-  }
-
-  // Chrome DPAPI can fail on some Windows setups. Firefox is the default.
-  // Set CLIPFORGE_YTDLP_BROWSER=none to disable browser cookies.
-  const browser = (process.env.CLIPFORGE_YTDLP_BROWSER || 'none')
-    .trim()
-    .toLowerCase();
-
-  if (browser === 'none' || browser === 'off' || browser === '') {
-    return {};
-  }
-
-  const supportedBrowsers = new Set([
-    'firefox',
-    'chrome',
-    'edge',
-    'brave',
-    'opera',
-    'vivaldi'
-  ]);
-
-  if (!supportedBrowsers.has(browser)) {
-    throw new Error(
-      'Unsupported cookie browser. Use firefox, chrome, edge, brave, opera, vivaldi, or none.'
-    );
-  }
-
-  return { cookiesFromBrowser: browser };
-}
-
 async function downloadPublicVideo(
   url: string,
   destinationPath: string,
   platform: 'YouTube' | 'Facebook'
 ): Promise<string> {
-  const cookieOptions: Record<string, any> =
-    platform === 'YouTube' ? getYouTubeCookieOptions() : {};
-  const cookieArgs: string[] = [];
-  if (typeof cookieOptions.cookies === 'string') {
-    cookieArgs.push('--cookies', cookieOptions.cookies);
-  } else if (typeof cookieOptions.cookiesFromBrowser === 'string') {
-    cookieArgs.push('--cookies-from-browser', cookieOptions.cookiesFromBrowser);
-  }
+  const cookieArgs =
+    platform === 'YouTube' ? await getYouTubeCookieArgs() : [];
 
   if (platform === 'YouTube') {
+    const cookieMode =
+      cookieArgs[0] === '--cookies'
+        ? 'cookies file'
+        : cookieArgs[0] === '--cookies-from-browser'
+          ? cookieArgs[1]
+          : 'none';
     console.log(
       '[URL IMPORT] YouTube cookie mode:',
-      process.env.CLIPFORGE_YTDLP_COOKIES
-        ? 'cookies file'
-        : (process.env.CLIPFORGE_YTDLP_BROWSER || 'none')
+      cookieMode
     );
   }
 
@@ -577,8 +540,11 @@ async function downloadPublicVideo(
     platform === 'YouTube' &&
     /sign in to confirm|confirm you.re not a bot|account verification|cookies|decrypt|dpapi/i.test(message)
   ) {
+    const hasCookieSource = cookieArgs.length > 0;
     throw new Error(
-      'YouTube requires account verification. Check that the selected browser profile is signed in to YouTube, or configure CLIPFORGE_YTDLP_COOKIES with a valid cookies.txt file. Do not share that file.'
+      hasCookieSource
+        ? 'YouTube requires account verification. Check that the configured cookie file or browser profile belongs to a signed-in YouTube account and has not expired.'
+        : 'YouTube may require account verification for this video. Public videos should work without cookies; if this video requires sign-in, configure CLIPFORGE_YTDLP_COOKIES with a readable cookies.txt file or select a signed-in browser profile.'
     );
   }
 

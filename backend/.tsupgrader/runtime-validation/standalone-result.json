@@ -1,0 +1,134 @@
+{
+  "planHash": "65bef8b091421ef76d675782e0cf3305cb306309e4663b71c08475986c2a6043",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-26T10:03:07.2015028Z",
+  "retryCount": 2,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 18091,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "backend-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E backend@1.0.0 build\r\n\u003E tsc\r\n\r\n",
+        "durationMs": 2955
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E backend@1.0.0 test\r\n\u003E vitest run\r\n\r\n\r\n RUN  v5.1.2 C:/Users/ANUP/ClipForge-AI/backend\r\n\r\n\r\n Test Files  2 passed (2)\r\n      Tests  10 passed (10)\r\n   Start at  15:33:02\r\n   Duration  951ms (tests 37%, import 36%, transform 25%, worker 3%)\r\n\r\n",
+        "durationMs": 7291,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 10,
+          "testsPassed": 10,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "health-endpoint-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n{\u0022success\u0022:true,\u0022message\u0022:\u0022ClipForge AI API is working\u0022}\n--- server output ---\n\r\n\u003E backend@1.0.0 start\r\n\u003E node dist/server.js\r\n\r\n\u25C7 injected env (4) from .env\r\n\r\n====================================\r\n\uD83D\uDE80 ClipForge AI Backend Started\r\n\uD83C\uDF10 Listening on port 5821\r\n\u2764\uFE0F /api/health\r\n\uD83C\uDFAC /api/videos\r\n\uD83C\uDFA8 /api/editor/catalog\r\n====================================\r\n\r\n",
+        "durationMs": 2053
+      },
+      {
+        "name": "video-health-endpoint-200",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n{\u0022success\u0022:true,\u0022message\u0022:\u0022ClipForge AI Video API is working!\u0022}\n--- server output ---\n\r\n\u003E backend@1.0.0 start\r\n\u003E node dist/server.js\r\n\r\n\u25C7 injected env (4) from .env\r\n\r\n====================================\r\n\uD83D\uDE80 ClipForge AI Backend Started\r\n\uD83C\uDF10 Listening on port 5821\r\n\u2764\uFE0F /api/health\r\n\uD83C\uDFAC /api/videos\r\n\uD83C\uDFA8 /api/editor/catalog\r\n====================================\r\n\r\n",
+        "durationMs": 2024
+      }
+    ],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "C:\\Users\\ANUP\\ClipForge-AI\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "backend-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\ANUP\\ClipForge-AI\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "C:\\Users\\ANUP\\ClipForge-AI\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "health-endpoint-200",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "C:\\Users\\ANUP\\ClipForge-AI\\backend",
+        "env": {
+          "PORT": "5821"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "video-health-endpoint-200",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "C:\\Users\\ANUP\\ClipForge-AI\\backend",
+        "env": {
+          "PORT": "5821"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}
