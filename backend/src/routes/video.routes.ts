@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -639,7 +639,7 @@ async function processInputVideo(
 ): Promise<void> {
   const dependencyError = checkProcessingDependencies();
   if (dependencyError) {
-    await removeFile(inputPath);
+    console.warn('[CLIPFORGE] Source video preserved because dependencies are unavailable:', inputPath);
     res.status(500).json({
       success: false,
       message: dependencyError
@@ -647,6 +647,7 @@ async function processInputVideo(
     return;
   }
   let generatedFilenames: string[] = [];
+  let processingSucceeded = false;
   try {
     console.log(
       '[CLIPFORGE] Processing started:',
@@ -734,6 +735,7 @@ async function processInputVideo(
       timeline: aiResult.timeline || [],
       analysis: aiResult.analysis || {}
     });
+    processingSucceeded = true;
   } catch (error) {
     if (generatedFilenames.length) {
       await removeGeneratedFiles(generatedFilenames);
@@ -753,7 +755,11 @@ async function processInputVideo(
       });
     }
   } finally {
-    await removeFile(inputPath);
+    if (processingSucceeded) {
+      await removeFile(inputPath);
+    } else {
+      console.warn('[CLIPFORGE] Failed source video preserved for debugging:', inputPath);
+    }
   }
 }
 // Upload local video.*
@@ -1026,3 +1032,5 @@ router.get('/test', (_req: Request, res: Response) => {
   });
 });
 export default router;
+
+
