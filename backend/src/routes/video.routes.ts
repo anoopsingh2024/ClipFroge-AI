@@ -16,14 +16,20 @@ const FFMPEG_PATH =
 const FFPROBE_PATH =
   process.env.CLIPFORGE_FFPROBE ||
   (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffprobe.exe' : '/usr/bin/ffprobe');
-const PYTHON_PATH =
-  process.env.CLIPFORGE_PYTHON ||
-  path.join(
-    BASE_DIR,
-    'ai-venv',
-    process.platform === 'win32' ? 'Scripts' : 'bin',
-    process.platform === 'win32' ? 'python.exe' : 'python'
-  );
+const configuredPythonPath = process.env.CLIPFORGE_PYTHON?.trim();
+const localWindowsPythonPath = path.join(
+  BASE_DIR,
+  'ai-venv',
+  'Scripts',
+  'python.exe'
+);
+const localLinuxPythonPath = path.join(
+  BASE_DIR,
+  'ai-venv',
+  'bin',
+  'python'
+);
+let resolvedPythonPath: string | undefined;
 const PUBLIC_BACKEND_URL = (
   process.env.PUBLIC_BACKEND_URL ||
   process.env.RENDER_EXTERNAL_URL ||
@@ -127,57 +133,65 @@ function runExternal(command: string, args: string[], timeoutMs: number): Promis
   });
 }
 
-async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
-  const directCandidates = [
-    process.env.CLIPFORGE_YTDLP?.trim(),
-    'yt-dlp.exe',
-    'yt-dlp',
-    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp.exe'),
-    path.join(BASE_DIR, 'node_modules', 'yt-dlp-exec', 'bin', 'yt-dlp'),
-  ].filter((value): value is string => Boolean(value));
-
-  let lastError: unknown;
-  for (const candidate of directCandidates) {
-    if (candidate.toLowerCase().includes(path.sep) &&
-        !fs.existsSync(candidate)) {
-      continue;
-    }
-    try {
-      await runExternal(candidate, args, timeoutMs);
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
+async function resolvePythonWithYtDlp(): Promise<string> {
+  if (resolvedPythonPath) return resolvedPythonPath;
   const pythonCandidates = [
-    process.env.CLIPFORGE_PYTHON?.trim(),
-    path.join(BASE_DIR, 'ai-venv', 'Scripts', 'python.exe'),
-    'python',
-  ].filter((value): value is string => Boolean(value));
+    configuredPythonPath,
+    '/opt/clipforge-venv/bin/python',
+    localWindowsPythonPath,
+    localLinuxPythonPath,
+    'python3',
+    'python'
+  ].filter((value, index, candidates): value is string =>
+    Boolean(value) && candidates.indexOf(value) === index
+  );
+  const pythonErrors: string[] = [];
 
   for (const candidate of pythonCandidates) {
-    if (candidate.toLowerCase().includes(path.sep) &&
-        !fs.existsSync(candidate) &&
-        candidate !== 'python') {
+    if (path.isAbsolute(candidate) && !fs.existsSync(candidate)) {
       continue;
     }
+
     try {
-      await runExternal(candidate, ['-m', 'yt_dlp', ...args], timeoutMs);
-      return;
+      await runExternal(
+        candidate,
+        ['-c', 'import yt_dlp; print(yt_dlp.version.__version__)'],
+        10_000
+      );
+      resolvedPythonPath = candidate;
+      return candidate;
     } catch (error) {
-      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      pythonErrors.push(`${candidate}: ${message}`);
     }
   }
 
-  const message = lastError instanceof Error
-    ? lastError.message
-    : String(lastError ?? 'Unknown yt-dlp startup error.');
+  const checks = pythonErrors.length
+    ? `Python checks: ${pythonErrors.join(' | ')}`
+    : 'No configured or fallback Python executable was found.';
   throw new Error(
-    `yt-dlp is unavailable or cannot start. Install it with ` +
-    `"winget install yt-dlp.yt-dlp", set CLIPFORGE_YTDLP, or install ` +
-    `"python -m pip install -U yt-dlp". Details: ${message}`
+    `yt-dlp could not be imported by any available Python environment. Install it in the ` +
+    `backend environment with "${configuredPythonPath || 'python'} -m pip install -U yt-dlp", ` +
+    `or configure CLIPFORGE_PYTHON. ${checks}`
   );
+}
+
+async function runYtDlp(args: string[], timeoutMs: number): Promise<void> {
+  const configuredYtDlp = process.env.CLIPFORGE_YTDLP?.trim();
+  if (configuredYtDlp) {
+    try {
+      await runExternal(configuredYtDlp, args, timeoutMs);
+      return;
+    } catch (error) {
+      console.warn(
+        '[URL IMPORT] Configured CLIPFORGE_YTDLP executable failed:',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  const pythonPath = await resolvePythonWithYtDlp();
+  await runExternal(pythonPath, ['-m', 'yt_dlp', ...args], timeoutMs);
 }
 
 async function normalizeDownloadedVideo(
@@ -290,9 +304,6 @@ function createDownloadJob(filenames: string[]): string {
   return jobId;
 }
 function checkProcessingDependencies(): string | null {
-  if (!fs.existsSync(PYTHON_PATH)) {
-    return `Python virtual environment not found: ${PYTHON_PATH}`;
-  }
   if (!fs.existsSync(PYTHON_SCRIPT)) {
     return `AI processing script not found: ${PYTHON_SCRIPT}`;
   }
@@ -580,10 +591,11 @@ async function downloadPublicVideo(
   throw new Error(`YouTube/Facebook download failed: ${message}`);
 }
 
-function runPython(inputPath: string): Promise<any> {
+async function runPython(inputPath: string): Promise<any> {
+  const pythonPath = resolvedPythonPath || await resolvePythonWithYtDlp();
   return new Promise((resolve, reject) => {
     const child = spawn(
-      PYTHON_PATH,
+      pythonPath,
       [PYTHON_SCRIPT, '--input', inputPath],
       {
         cwd: BASE_DIR,

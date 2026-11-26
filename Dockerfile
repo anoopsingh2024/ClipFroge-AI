@@ -20,7 +20,7 @@ COPY backend/ ./
 RUN npm run build \
     && npm prune --omit=dev \
     && python3 -m venv /opt/clipforge-venv \
-    && /opt/clipforge-venv/bin/pip install --no-cache-dir -r ai_engine/requirements.txt \
+    && /opt/clipforge-venv/bin/python -m pip install --no-cache-dir -r ai_engine/requirements.txt \
     && mkdir -p uploads outputs
 
 ENV NODE_ENV=production \
