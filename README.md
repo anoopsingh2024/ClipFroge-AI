@@ -142,6 +142,13 @@ production build uses that backend's `/api` endpoint; its development build
 continues to use the local `/api` proxy. Render's local filesystem is
 ephemeral, so uploaded and generated videos are not retained across restarts.
 
+## Netlify frontend deployment
+
+The root `netlify.toml` sets the frontend base directory to `frontend`, builds
+with `npm run build`, and publishes `dist/frontend/browser`. Keep the Netlify
+site's Base directory set to `frontend` (without leading whitespace) if it is
+also configured in the Netlify dashboard.
+
 ## Hindi and English captions
 
 Speech recognition uses Faster-Whisper's multilingual transcription mode with
